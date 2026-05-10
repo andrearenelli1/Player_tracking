@@ -4,3 +4,10 @@ venv/
 # Python cache
 __pycache__/
 *.pyc
+
+# MP4 for yolo test
+output.mp4
+output_yolo.mp4
+
+# yolov8n pretrained model
+yolov8n.pt
