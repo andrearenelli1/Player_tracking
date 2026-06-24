@@ -2,6 +2,7 @@ from ultralytics import YOLO
 from collections import defaultdict
 import cv2
 import numpy as np
+import pandas as pd
 
 def tracking_2d():
     # Import the model
@@ -9,6 +10,12 @@ def tracking_2d():
     # Open the video file
     video_path = 'videos/vid_test.mp4'
     cap = cv2.VideoCapture(video_path)
+
+    # Initialize the dataframe used to store the data
+    df = pd.DataFrame(columns=["frame", "cam_id", "object_id", "u", "v"])
+
+    # Frame counter
+    frm_cnt = -1
 
     # Store the track history
     track_history = defaultdict(lambda: [])
@@ -19,6 +26,7 @@ def tracking_2d():
         success, frame = cap.read()
 
         if success:
+            frm_cnt += 1
             # Run YOLO26 tracking on the frame, persisting tracks between frames
             result = model.track(frame, persist=True)[0]
 
@@ -42,6 +50,9 @@ def tracking_2d():
                     points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
                     cv2.polylines(frame, [points], isClosed=False, color=(0,230,0), thickness=5)
 
+                    # Write the positions in the df
+                    df.loc[len(df)] = [frm_cnt, "cam_1", track_id, x.item(), y.item()]
+
             # Display the annotated frame
             resized_frame = cv2.resize(frame, (1280,800))
             cv2.imshow("YOLO26 Tracking", resized_frame)
@@ -56,6 +67,8 @@ def tracking_2d():
     # Release the video capture object and close the display window
     cap.release()
     cv2.destroyAllWindows()
+    # Write the df in a csv
+    df.to_csv("../tracking_results/tracking_2d/2d_positions.csv", index=False)
 
 
 
