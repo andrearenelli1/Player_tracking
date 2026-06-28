@@ -5,8 +5,11 @@ venv/
 __pycache__/
 *.pyc
 
-# MP4 for yolo test
+# MP4
 *.mp4
+
+# Annotated frames
+*.png
 
 # yolov8n pretrained model
 *.pt
