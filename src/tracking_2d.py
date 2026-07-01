@@ -3,20 +3,31 @@ from collections import defaultdict
 import cv2
 import numpy as np
 import pandas as pd
+from pathlib import Path
+
+display_videos = False
+ROOT = Path(__file__).parent.parent
+VIDEOS = {
+    "out2": ROOT / "videos/out2.mp4",
+    "out4": ROOT / "videos/out4.mp4",
+    "out13": ROOT / "videos/out13.mp4",
+}
+
+CSVS = {
+    "csv0": ROOT / "tracking_results/tracking_2d/positions/2d_positions0.csv",
+    "csv1": ROOT / "tracking_results/tracking_2d/positions/2d_positions1.csv",
+    "csv2": ROOT / "tracking_results/tracking_2d/positions/2d_positions2.csv",
+}
 
 def tracking_2d():
     # Import the model
     #model = YOLO('yolo26n.pt')
     model = YOLO('yolov8s.pt')
-    # Save the path to the videos
-    video_path1 = '../videos/out2.mp4'
-    video_path2 = '../videos/out4.mp4'
-    video_path3 = '../videos/out13.mp4'
-    video_paths = [video_path1, video_path2, video_path3]
+    i = -1
 
-    for i in range(len(video_paths)):
-        
-        cap = cv2.VideoCapture(video_paths[i])
+    for (_, vid), (_, csv_file) in zip(VIDEOS.items(), CSVS.items()):
+        i += 1
+        cap = cv2.VideoCapture(vid)
         # Initialize the dataframe used to store the data
         df = pd.DataFrame(columns=["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"])
         # Frame counter
@@ -32,16 +43,16 @@ def tracking_2d():
             if success:
                 frm_cnt += 1
                 # Run YOLO26 tracking on the frame, persisting tracks between frames
-                result = model.track(frame, persist=True)[0]
+                result = model.track(frame, persist=True, verbose=False)[0]
 
                 # Get the boxes and track IDs
                 if result.boxes and result.boxes.is_track:
-                    boxes = result.boxes.xywh.cpu()
+                    boxes = result.boxes.xywh.cpu().int()
                     track_ids = result.boxes.id.int().cpu().tolist()
                     classes = result.boxes.cls.int().cpu().tolist()
 
                     # Visualize the result on the frame
-                    frame = result.plot()
+                    if display_videos: frame = result.plot()
 
                     # Skip everithing but people and sport ball
                     for box, track_id, cls in zip(boxes, track_ids, classes):
@@ -64,7 +75,7 @@ def tracking_2d():
 
                 # Display the annotated frame
                 resized_frame = cv2.resize(frame, (1280,800))
-                cv2.imshow("YOLO26 Tracking", resized_frame)
+                if display_videos: cv2.imshow("YOLO26 Tracking", resized_frame)
 
                 # Break the loop if 'q' is pressed
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -77,7 +88,7 @@ def tracking_2d():
         cap.release()
         cv2.destroyAllWindows()
         # Write the df in a csv
-        df.to_csv(f"../tracking_results/tracking_2d/2d_positions{i}.csv", index=False)
+        df.to_csv(csv_file, index=False)
 
 
 

@@ -9,9 +9,9 @@ ROOT = Path(__file__).parent.parent
 
 GT_JSON = ROOT / "annotations/_annotations.coco.json"
 TRACKING_CSVS = {
-    "out2":  ROOT / "tracking_results/tracking_2d/2d_positions0.csv",
-    "out4":  ROOT / "tracking_results/tracking_2d/2d_positions1.csv",
-    "out13": ROOT / "tracking_results/tracking_2d/2d_positions2.csv",
+    "out2":  ROOT / "tracking_results/tracking_2d/positions/2d_positions0.csv",
+    "out4":  ROOT / "tracking_results/tracking_2d/positions/2d_positions1.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/positions/2d_positions2.csv",
 }
 METRICS_JSON = ROOT / "tracking_results/tracking_2d/evaluation/metrics.json"
 METRICS_CSV  = ROOT / "tracking_results/tracking_2d/evaluation/metrics_summary.csv"
