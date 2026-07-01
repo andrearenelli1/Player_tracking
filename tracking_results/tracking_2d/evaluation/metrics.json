@@ -1,0 +1,56 @@
+{
+  "out2": {
+    "person": {
+      "TP": 370,
+      "FP": 177,
+      "FN": 374,
+      "precision": 0.6764,
+      "recall": 0.4973,
+      "mean_iou": 0.651
+    },
+    "ball": {
+      "TP": 0,
+      "FP": 0,
+      "FN": 42,
+      "precision": 0.0,
+      "recall": 0.0,
+      "mean_iou": 0.0
+    }
+  },
+  "out4": {
+    "person": {
+      "TP": 4,
+      "FP": 9,
+      "FN": 468,
+      "precision": 0.3077,
+      "recall": 0.0085,
+      "mean_iou": 0.7874
+    },
+    "ball": {
+      "TP": 0,
+      "FP": 0,
+      "FN": 16,
+      "precision": 0.0,
+      "recall": 0.0,
+      "mean_iou": 0.0
+    }
+  },
+  "out13": {
+    "person": {
+      "TP": 6,
+      "FP": 5,
+      "FN": 1256,
+      "precision": 0.5455,
+      "recall": 0.0048,
+      "mean_iou": 0.6603
+    },
+    "ball": {
+      "TP": 0,
+      "FP": 0,
+      "FN": 102,
+      "precision": 0.0,
+      "recall": 0.0,
+      "mean_iou": 0.0
+    }
+  }
+}

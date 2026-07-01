@@ -1,0 +1,7 @@
+camera,class,TP,FP,FN,precision,recall,mean_iou
+out2,person,370,177,374,0.6764,0.4973,0.651
+out2,ball,0,0,42,0.0,0.0,0.0
+out4,person,4,9,468,0.3077,0.0085,0.7874
+out4,ball,0,0,16,0.0,0.0,0.0
+out13,person,6,5,1256,0.5455,0.0048,0.6603
+out13,ball,0,0,102,0.0,0.0,0.0
