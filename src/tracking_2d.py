@@ -6,6 +6,10 @@ import pandas as pd
 from pathlib import Path
 
 display_videos = False
+PERSON_CLASS = 0
+BALL_CLASS = 32
+VIDEO_WIDTH_RESIZED = 1920
+VIDEO_HEIGHT_RESIZED = 1080
 ROOT = Path(__file__).parent.parent
 VIDEOS = {
     "out2": ROOT / "videos/out2.mp4",
@@ -22,7 +26,7 @@ CSVS = {
 def tracking_2d():
     # Import the model
     #model = YOLO('yolo26n.pt')
-    model = YOLO('yolov8s.pt')
+    model = YOLO('yolov8s.pt')#.to('cuda')
     i = -1
 
     for (_, vid), (_, csv_file) in zip(VIDEOS.items(), CSVS.items()):
@@ -34,6 +38,7 @@ def tracking_2d():
         frm_cnt = -1
         # Store the track history
         track_history = defaultdict(lambda: [])
+        rows = []
         
         # Loop through the video frames
         while cap.isOpened():
@@ -41,7 +46,13 @@ def tracking_2d():
             success, frame = cap.read()
 
             if success:
+                VIDEO_WIDTH_ORIGINAL = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                VIDEO_HEIGHT_ORIGINAL = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                SCALE_X = VIDEO_WIDTH_ORIGINAL / VIDEO_WIDTH_RESIZED
+                SCALE_Y = VIDEO_HEIGHT_ORIGINAL / VIDEO_HEIGHT_RESIZED
                 frm_cnt += 1
+                print(f"Analyzing the frame {frm_cnt} / {int(cap.get(cv2.CAP_PROP_FRAME_COUNT))} of video {i+1} / 3")
+                frame = cv2.resize(frame, (1920, 1080))
                 # Run YOLO26 tracking on the frame, persisting tracks between frames
                 result = model.track(frame, persist=True, verbose=False)[0]
 
@@ -56,7 +67,7 @@ def tracking_2d():
 
                     # Skip everithing but people and sport ball
                     for box, track_id, cls in zip(boxes, track_ids, classes):
-                        if cls != 0 and cls != 32:
+                        if cls != PERSON_CLASS and cls != BALL_CLASS:
                             continue
 
                         # Plot the tracks
@@ -71,7 +82,12 @@ def tracking_2d():
                         cv2.polylines(frame, [points], isClosed=False, color=(0,230,0), thickness=5)
 
                         # Write the positions in the df
-                        df.loc[len(df)] = [frm_cnt, f"cam_{i}", cls, track_id, x.item(), y.item(), w.item(), h.item()]
+                        #df.loc[len(df)] = [frm_cnt, f"cam_{i}", cls, track_id, x.item(), y.item(), w.item(), h.item()]
+                        rows.append([frm_cnt, f"cam_{i}", cls, track_id, 
+                                     x.item() * SCALE_X, 
+                                     y.item() * SCALE_Y, 
+                                     w.item() * SCALE_X, 
+                                     h.item() * SCALE_Y])
 
                 # Display the annotated frame
                 resized_frame = cv2.resize(frame, (1280,800))
@@ -87,6 +103,7 @@ def tracking_2d():
         # Release the video capture object and close the display window
         cap.release()
         cv2.destroyAllWindows()
+        df = pd.DataFrame(rows, columns=["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"])
         # Write the df in a csv
         df.to_csv(csv_file, index=False)
 
