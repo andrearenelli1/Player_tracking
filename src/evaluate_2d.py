@@ -73,9 +73,15 @@ def xywh_to_xyxy(df: pd.DataFrame) -> pd.DataFrame:
         lambda box: [box[0], box[1], box[0] + box[2], box[1] + box[3]])
     return df
 
+def uvwh_to_xyxy(df: pd.DataFrame) -> pd.DataFrame:
+    df["bbox"] = df["bbox"].apply(
+        lambda box: [box[0] - box[2] / 2, box[1] - box[3] / 2,
+                     box[0] + box[2] / 2, box[1] + box[3] / 2])
+    return df
+
 def compute_cost_mat(gt_df: pd.DataFrame, res_df: pd.DataFrame) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-    gt_df = xywh_to_xyxy(gt_df)
-    res_df = xywh_to_xyxy(res_df)
+    gt_df  = xywh_to_xyxy(gt_df)
+    res_df = uvwh_to_xyxy(res_df)
     gt_players = gt_df[gt_df["class_id"] == 0]["bbox"].tolist()
     gt_ball = gt_df[gt_df["class_id"] == 32]["bbox"].tolist()
     res_players = res_df[res_df["class_id"] == 0]["bbox"].tolist()
