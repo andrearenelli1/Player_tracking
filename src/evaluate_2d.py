@@ -22,7 +22,7 @@ def load_gt(json_gt: Path) -> dict[str, pd.DataFrame]:
     with open(json_gt, "r") as jsonfile:
         data = json.load(jsonfile)
     cat_id_to_class = {
-        cat["id"]: (32 if "ball" in cat["name"].lower() else 0)
+        cat["id"]: (1 if "ball" in cat["name"].lower() else 0)
         for cat in data["categories"]
     }
     df = pd.DataFrame(data["annotations"])
@@ -83,9 +83,9 @@ def compute_cost_mat(gt_df: pd.DataFrame, res_df: pd.DataFrame) -> tuple[torch.T
     gt_df  = xywh_to_xyxy(gt_df)
     res_df = uvwh_to_xyxy(res_df)
     gt_players = gt_df[gt_df["class_id"] == 0]["bbox"].tolist()
-    gt_ball = gt_df[gt_df["class_id"] == 32]["bbox"].tolist()
+    gt_ball = gt_df[gt_df["class_id"] == 1]["bbox"].tolist()
     res_players = res_df[res_df["class_id"] == 0]["bbox"].tolist()
-    res_ball = res_df[res_df["class_id"] == 32]["bbox"].tolist()
+    res_ball = res_df[res_df["class_id"] == 1]["bbox"].tolist()
     gt_pl_tensor = torch.tensor(gt_players, dtype=torch.float32)
     gt_bl_tensor = torch.tensor(gt_ball, dtype=torch.float32)
     res_pl_tensor = torch.tensor(res_players, dtype=torch.float32)
@@ -162,9 +162,9 @@ def main() -> None:
             res_frame = track_df[cam][track_df[cam]["frame_ds"] == frame]
 
             n_gt_p  = len(gt_frame[gt_frame["class_id"] == 0])
-            n_gt_b  = len(gt_frame[gt_frame["class_id"] == 32])
+            n_gt_b  = len(gt_frame[gt_frame["class_id"] == 1])
             n_res_p = len(res_frame[res_frame["class_id"] == 0])
-            n_res_b = len(res_frame[res_frame["class_id"] == 32])
+            n_res_b = len(res_frame[res_frame["class_id"] == 1])
 
             player_mat, ball_mat = compute_cost_mat(gt_frame, res_frame)
 

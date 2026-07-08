@@ -1,0 +1,6 @@
+train: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/dataset/train/images
+val: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/dataset/valid/images
+test: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/dataset/test/images
+
+nc: 2
+names: ['person', 'ball']

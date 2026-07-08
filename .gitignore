@@ -10,6 +10,7 @@ __pycache__/
 
 # Annotated frames
 *.png
+*.jpg
 
 # yolov8n pretrained model
 *.pt

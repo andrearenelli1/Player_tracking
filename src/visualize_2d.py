@@ -15,7 +15,7 @@ VIDEOS = {
     "out13": ROOT / "videos/out13.mp4",
 }
 PERSON_CLASS_ID = 0
-BALL_CLASS_ID = 32
+BALL_CLASS_ID = 1
 TRAJ_LENGTH = 10
 
 def compute_corners(u: float, v: float, w: float, h: float) -> dict[str, tuple[int, int]]:
@@ -42,6 +42,9 @@ def draw_bb(frame: np.ndarray, frame_id: int, bb_df: pd.DataFrame) -> None:
             line_color = green
         elif row["class_id"] == BALL_CLASS_ID:
             line_color = red
+        else:
+            line_color = green
+            print("--------------------------ERROR: Class not found--------------------------")
         corners = compute_corners(row["u"], row["v"], row["w"], row["h"])
         cv2.line(frame, corners["tl"], corners["bl"], line_color, line_thickness)
         cv2.line(frame, corners["bl"], corners["br"], line_color, line_thickness)

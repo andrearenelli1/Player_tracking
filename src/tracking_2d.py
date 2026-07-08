@@ -7,13 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-MODEL_PATH = 'yolov8s.pt'
+MODEL_PATH = ROOT / "runs/detect/train/weights/best.pt"
 DISPLAY    = False
 INFER_W    = 1920
 INFER_H    = 1088
 TRAIL_LEN  = 30
 CONF       = 0.1
-CLASSES    = [0, 32]
+CLASSES    = [0, 1]
 
 CAMERAS = [
     ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/positions/2d_positions0.csv"),
@@ -51,9 +51,13 @@ def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> N
 
             for box, track_id, cls in zip(boxes, track_ids, classes):
                 x, y, w, h = box
+                sw, sh = w.item() * scale_x, h.item() * scale_y
+                # reject ball detections that are player-shaped (tall and thin)
+                if cls == 1 and (sh == 0 or sw / sh < 0.4):
+                    continue
                 rows.append([frame_idx, cam_id, cls, track_id,
                               x.item() * scale_x, y.item() * scale_y,
-                              w.item() * scale_x, h.item() * scale_y])
+                              sw, sh])
 
                 if DISPLAY:
                     trail[track_id].append((float(x), float(y)))
