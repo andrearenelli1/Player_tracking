@@ -18,7 +18,7 @@ PERSON_CLASS_ID = 0
 BALL_CLASS_ID = 32
 TRAJ_LENGTH = 10
 
-def compute_corners(u, v, w, h):
+def compute_corners(u: float, v: float, w: float, h: float) -> dict[str, tuple[int, int]]:
     tl = (int(u - w / 2), int(v - h / 2))
     tr = (int(u + w / 2), int(v - h / 2))
     bl = (int(u - w / 2), int(v + h / 2))
@@ -31,7 +31,7 @@ def compute_corners(u, v, w, h):
     }
     return corners
 
-def draw_bb(frame, frame_id, bb_df):
+def draw_bb(frame: np.ndarray, frame_id: int, bb_df: pd.DataFrame) -> None:
     bb = bb_df[bb_df["frame"] == frame_id]
     line_thickness = 3
     red = (0, 0, 255)
@@ -50,7 +50,7 @@ def draw_bb(frame, frame_id, bb_df):
         cv2.putText(frame, f"ID={row["object_id"]}", corners["tr"], cv2.FONT_HERSHEY_SIMPLEX, 1, line_color, 2)
         draw_traj(bb_df, frame_id, row, line_color, frame)
 
-def draw_traj(bb_df, frame_id, row, color, frame):
+def draw_traj(bb_df: pd.DataFrame, frame_id: int, row: pd.Series, color: tuple[int, int, int], frame: np.ndarray) -> None:
     filtered_df = bb_df[(bb_df["frame"] <= frame_id) &
                         (bb_df["frame"] > max(frame_id - TRAJ_LENGTH, 0)) &
                         (bb_df["object_id"] == row["object_id"])]
@@ -60,7 +60,7 @@ def draw_traj(bb_df, frame_id, row, color, frame):
     thickness = 4
     cv2.polylines(frame, points, True, color, thickness)
 
-def disp_video():
+def disp_video() -> None:
     for (cam_id, vid), (csv_id, csv_file) in zip(VIDEOS.items(), POS_CSVS.items()):
         cap = cv2.VideoCapture(vid)
         bb_df = pd.read_csv(csv_file)
@@ -87,7 +87,7 @@ def disp_video():
         cap.release()
         cv2.destroyAllWindows()
 
-def main():
+def main() -> None:
     disp_video()
 
 if __name__ == "__main__":

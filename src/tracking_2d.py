@@ -10,7 +10,7 @@ ROOT = Path(__file__).parent.parent
 MODEL_PATH = 'yolov8s.pt'
 DISPLAY    = False
 INFER_W    = 1920
-INFER_H    = 1080
+INFER_H    = 1088
 TRAIL_LEN  = 30
 CONF       = 0.1
 CLASSES    = [0, 32]
@@ -24,7 +24,7 @@ CAMERAS = [
 CSV_COLUMNS = ["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"]
 
 
-def track_video(model, cam_id, video_path, csv_path):
+def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> None:
     cap = cv2.VideoCapture(str(video_path))
     total   = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     scale_x = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  / INFER_W
@@ -38,7 +38,7 @@ def track_video(model, cam_id, video_path, csv_path):
         if not success:
             break
 
-        print(f"  {cam_id + 1}  frame {frame_idx + 1} / {total}")
+        print(f"  {cam_id}  frame {frame_idx + 1} / {total}")
 
         small  = cv2.resize(frame, (INFER_W, INFER_H))
         result = model.track(small, persist=True, verbose=False,
@@ -75,7 +75,7 @@ def track_video(model, cam_id, video_path, csv_path):
     pd.DataFrame(rows, columns=CSV_COLUMNS).to_csv(csv_path, index=False)
 
 
-def main():
+def main() -> None:
     model = YOLO(MODEL_PATH).to('cuda')
     for i, (cam_id, video_path, csv_path) in enumerate(CAMERAS):
         track_video(model, cam_id, video_path, csv_path)

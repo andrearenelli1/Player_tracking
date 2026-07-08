@@ -1,11 +1,3 @@
-'''
-Steps to implement:
-- import the GT data
-- import the results of the tracking
-- for each frame match the bounding boxes of GT and tracking (min center distance for association)
-- compute IOU for each box couple
-'''
-
 import json
 from pathlib import Path
 import pandas as pd
@@ -23,9 +15,10 @@ TRACKING_CSVS = {
     "out4": ROOT / "tracking_results/tracking_2d/positions/2d_positions1.csv",
     "out13": ROOT / "tracking_results/tracking_2d/positions/2d_positions2.csv",
 }
+IOU_THRESHOLD = 0.5
 
 
-def load_gt(json_gt):
+def load_gt(json_gt: Path) -> dict[str, pd.DataFrame]:
     with open(json_gt, "r") as jsonfile:
         data = json.load(jsonfile)
     cat_id_to_class = {
@@ -61,7 +54,7 @@ def load_gt(json_gt):
         out[cam_name]["frame"] = out[cam_name]["frame"] - 1
     return out
 
-def load_track(tracking_csvs):
+def load_track(tracking_csvs: dict[str, Path]) -> dict[str, pd.DataFrame]:
     track_df = {}
     for cam_name, csv_path in tracking_csvs.items():
         df = pd.read_csv(csv_path)
@@ -75,12 +68,12 @@ def load_track(tracking_csvs):
         track_df[cam_name] = df.drop("cam_id", axis=1)
     return track_df
 
-def xywh_to_xyxy(df):
+def xywh_to_xyxy(df: pd.DataFrame) -> pd.DataFrame:
     df["bbox"] = df["bbox"].apply(
         lambda box: [box[0], box[1], box[0] + box[2], box[1] + box[3]])
     return df
 
-def hungarian_matching(gt_df, res_df):
+def compute_cost_mat(gt_df: pd.DataFrame, res_df: pd.DataFrame) -> tuple[torch.Tensor | None, torch.Tensor | None]:
     gt_df = xywh_to_xyxy(gt_df)
     res_df = xywh_to_xyxy(res_df)
     gt_players = gt_df[gt_df["class_id"] == 0]["bbox"].tolist()
@@ -101,29 +94,84 @@ def hungarian_matching(gt_df, res_df):
         players_cost_mat = None
     return players_cost_mat, ball_cost_mat
 
-def downsample_df(df):
+def downsample_df(df: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     df_ds = {}
     for cam in df:
         df_ds[cam] = df[cam][df[cam]["frame"] % STRIDE == 0]
         df_ds[cam]["frame_ds"] = (df_ds[cam]["frame"] / STRIDE).astype(int)
     return df_ds
 
-def main():
-    gt_df = load_gt(JSON_GT)
-    track_df = load_track(TRACKING_CSVS)
-    track_df = downsample_df(track_df)
+
+
+def match_boxes(cost_mat: torch.Tensor | None, n_gt: int, n_res: int, threshold: float) -> tuple[int, int, int, float]:
+
+    if cost_mat is None:
+        return 0, n_res, n_gt, 0.0
+
+    rows, cols = linear_sum_assignment(cost_mat.detach().cpu().numpy(), maximize=True)
+
+    tp, iou_sum = 0, 0.0
+    matched_gt, matched_res = set(), set()
+    for r, c in zip(rows, cols):
+        iou_val = cost_mat[r, c].item()
+        if iou_val >= threshold:
+            tp      += 1
+            iou_sum += iou_val
+            matched_gt.add(r)
+            matched_res.add(c)
+
+    fp = n_res - len(matched_res)
+    fn = n_gt  - len(matched_gt)
+    return tp, fp, fn, iou_sum
+
+
+def print_metrics(label: str, tp: int, fp: int, fn: int, iou_sum: float) -> None:
+    precision = tp / (tp + fp)              if (tp + fp) > 0           else 0.0
+    recall    = tp / (tp + fn)              if (tp + fn) > 0           else 0.0
+    f1        = 2 * precision * recall / (precision + recall) \
+                                            if (precision + recall) > 0 else 0.0
+    motp      = iou_sum / tp               if tp > 0                  else 0.0
+    print(f"{label}:  TP={tp}  FP={fp}  FN={fn}")
+    print(f"  Precision = {precision:.3f}")
+    print(f"  Recall    = {recall:.3f}")
+    print(f"  F1        = {f1:.3f}")
+    print(f"  MOTP      = {motp:.3f}  (mean IoU over matched pairs)")
+
+
+def main() -> None:
+    gt_df    = load_gt(JSON_GT)
+    track_df = downsample_df(load_track(TRACKING_CSVS))
+
+    tp_p, fp_p, fn_p, iou_sum_p = 0, 0, 0, 0.0
+    tp_b, fp_b, fn_b, iou_sum_b = 0, 0, 0, 0.0
 
     for cam in gt_df:
         common_frames = sorted(
             set(gt_df[cam]["frame"]).intersection(track_df[cam]["frame_ds"]))
+        print(f"Processing {cam}")
+
         for frame in common_frames:
-            df1 = gt_df[cam][gt_df[cam]["frame"] == frame]
-            df2 = track_df[cam][track_df[cam]["frame_ds"] == frame]
-            player_cost_mat, ball_cost_mat = hungarian_matching(df1, df2)
-            if player_cost_mat is not None:
-                r_p, c_p = linear_sum_assignment(player_cost_mat.numpy(), True)
-            if ball_cost_mat is not None:    
-                r_b, c_b = linear_sum_assignment(ball_cost_mat.numpy(), True)
-            
+            print(f"frame: {frame} in {len(common_frames)}")
+            gt_frame  = gt_df[cam][gt_df[cam]["frame"] == frame]
+            res_frame = track_df[cam][track_df[cam]["frame_ds"] == frame]
+
+            n_gt_p  = len(gt_frame[gt_frame["class_id"] == 0])
+            n_gt_b  = len(gt_frame[gt_frame["class_id"] == 32])
+            n_res_p = len(res_frame[res_frame["class_id"] == 0])
+            n_res_b = len(res_frame[res_frame["class_id"] == 32])
+
+            player_mat, ball_mat = compute_cost_mat(gt_frame, res_frame)
+
+            tp, fp, fn, iou = match_boxes(player_mat, n_gt_p, n_res_p, IOU_THRESHOLD)
+            tp_p += tp; fp_p += fp; fn_p += fn; iou_sum_p += iou
+
+            tp, fp, fn, iou = match_boxes(ball_mat, n_gt_b, n_res_b, IOU_THRESHOLD)
+            tp_b += tp; fp_b += fp; fn_b += fn; iou_sum_b += iou
+
+    print("\n\n\n\n")
+    print_metrics("Players", tp_p, fp_p, fn_p, iou_sum_p)
+    print()
+    print_metrics("Ball",    tp_b, fp_b, fn_b, iou_sum_b)
+
 if __name__ == "__main__":
     main()
