@@ -37,7 +37,18 @@ names: ['person', 'ball']
     print("data.yaml updated.")
 
 
+def already_prepared() -> bool:
+    yaml_path = DATASET / "data.yaml"
+    if not yaml_path.exists():
+        return False
+    content = yaml_path.read_text()
+    return "names: ['person', 'ball']" in content
+
+
 def main() -> None:
+    if already_prepared():
+        print("Dataset already prepared — skipping to avoid double-remap.")
+        return
     remap_labels()
     fix_yaml()
 
