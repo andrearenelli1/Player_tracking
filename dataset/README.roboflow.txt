@@ -1,8 +1,8 @@
 
-tracking_03 - vdataset tracking_03
+tracking_03 - v2 2026-07-09 9:08pm
 ==============================
 
-This dataset was exported via roboflow.com on July 8, 2026 at 1:41 PM GMT
+This dataset was exported via roboflow.com on July 9, 2026 at 7:10 PM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -20,4 +20,10 @@ To find over 100k other datasets and pre-trained models, visit https://universe.
 The dataset includes 309 images.
 Person-ELwd-t3B5-TBnk are annotated in YOLOv8 format.
 
-No pre-processing or augmentation was applied.
+The following pre-processing was applied to each image:
+* Auto-orientation of pixel data (with EXIF-orientation stripping)
+* Resize to 1280x720 (Stretch)
+
+No image augmentation techniques were applied.
+
+
