@@ -16,10 +16,12 @@ CSV_COLUMNS = ["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"]
 DISPLAY = True
 IMAGE_WIDTH = 1600
 IMAGE_HEIGHT = 600
-HSV_LOW = (0, 120, 50)
-HSV_HIGH = (12, 255, 255)
-FRAME_DIFF_LOW = (210, 210, 210)
-FRAME_DIFF_UP = (245, 245, 245)
+HSV_LOW = (0, 60, 40)
+HSV_HIGH = (25, 255, 255)
+FRAME_DIFF_LOW = (25, 25, 25)
+FRAME_DIFF_UP = (255, 255, 255)
+MIN_AREA = 5
+MAX_AREA = 300
 
 
 def track_video(cam_id: str, video_path: Path, csv_path: Path) -> None:
@@ -39,14 +41,22 @@ def track_video(cam_id: str, video_path: Path, csv_path: Path) -> None:
         print(f"  {cam_id}  frame {frame_idx + 1} / {total}")
 
         hsv = cv2.cvtColor(new_frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, HSV_LOW, HSV_HIGH)
-        diff = cv2.inRange((new_frame - old_frame), FRAME_DIFF_LOW, FRAME_DIFF_UP)
-        diff = cv2.GaussianBlur(diff, (5, 5), 0)
+        hsv_mask = cv2.inRange(hsv, HSV_LOW, HSV_HIGH)
+        diff = cv2.absdiff(new_frame, old_frame)
+        diff_blur = cv2.GaussianBlur(diff, (5, 5), 0)
+        diff_blur_th = cv2.inRange(diff_blur, FRAME_DIFF_LOW, FRAME_DIFF_UP)
+        mask_int = cv2.bitwise_and(diff_blur_th, hsv_mask)
+
+        contours, _ = cv2.findContours(mask_int, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        candidates = [cnt for cnt in contours if MIN_AREA < cv2.contourArea(cnt) < MAX_AREA]
 
         if DISPLAY:
-            mask_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-            diff_bgr = cv2.cvtColor(diff, cv2.COLOR_GRAY2BGR)
-            pair = np.hstack([diff_bgr, mask_bgr, new_frame])
+            vis = new_frame.copy()
+            cv2.drawContours(vis, candidates, -1, (0, 255, 0), 2)
+            mask_bgr = cv2.cvtColor(hsv_mask, cv2.COLOR_GRAY2BGR)
+            diff_bgr = cv2.cvtColor(diff_blur_th, cv2.COLOR_GRAY2BGR)
+            mask_int_bgr = cv2.cvtColor(mask_int, cv2.COLOR_GRAY2BGR)
+            pair = np.hstack([diff_bgr, mask_bgr, mask_int_bgr, vis])
             cv2.imshow(cam_id, cv2.resize(pair, (IMAGE_WIDTH, IMAGE_HEIGHT)))
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break   
