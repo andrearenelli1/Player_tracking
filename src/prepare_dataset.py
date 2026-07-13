@@ -1,9 +1,20 @@
+from roboflow import Roboflow
 from pathlib import Path
 
 ROOT    = Path(__file__).parent.parent
 DATASET = ROOT / "dataset"
 
 SPLITS  = ["train", "valid", "test"]
+
+
+def download_dataset() -> None:
+    if any((DATASET / split / "images").exists() for split in SPLITS):
+        print("Dataset already downloaded — skipping.")
+        return
+    rf = Roboflow(api_key="8yoXaVAQ7fDNF0EEN8AF")
+    project = rf.workspace("tracking-rybv7").project("tracking_merged_all")
+    version = project.version(4)
+    version.download("yolo26", location=str(DATASET))
 
 
 def remap_labels() -> None:
@@ -46,6 +57,7 @@ def already_prepared() -> bool:
 
 
 def main() -> None:
+    download_dataset()
     if already_prepared():
         print("Dataset already prepared — skipping to avoid double-remap.")
         return
