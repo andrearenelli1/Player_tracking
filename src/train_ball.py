@@ -13,7 +13,9 @@ def main() -> None:
         imgsz=(720, 1280),
         batch=16,
         device="cuda",
-        patience=20,
+        patience=15,
+        mosaic=0.0,        
+        scale=(1.0, 1.3),  
     )
 
 
