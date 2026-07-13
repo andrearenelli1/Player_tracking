@@ -39,8 +39,7 @@ nvidia-nccl-cu13==2.28.9
 nvidia-nvjitlink==13.0.88
 nvidia-nvshmem-cu13==3.4.5
 nvidia-nvtx==13.0.85
-opencv-python==4.13.0.92
-opencv-python-headless==4.10.0.84
+opencv-python==5.0.0.93
 packaging==26.2
 pandas==3.0.3
 pi_heif==1.4.0

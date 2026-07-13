@@ -12,8 +12,8 @@ DISPLAY    = False
 INFER_W    = 1920
 INFER_H    = 1088
 TRAIL_LEN  = 30
-CONF       = 0.1
-CLASSES    = [0]
+CONF       = 0.05
+CLASSES    = [1]
 
 CAMERAS = [
     ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/positions/2d_positions0.csv"),
@@ -72,7 +72,8 @@ def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> N
                 break
 
     cap.release()
-    cv2.destroyAllWindows()
+    if DISPLAY:
+        cv2.destroyAllWindows()
     pd.DataFrame(rows, columns=CSV_COLUMNS).to_csv(csv_path, index=False)
 
 

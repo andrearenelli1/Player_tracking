@@ -14,7 +14,6 @@ VIDEOS = {
     "out4": ROOT / "videos/out4.mp4",
     "out13": ROOT / "videos/out13.mp4",
 }
-PERSON_CLASS_ID = 0
 BALL_CLASS_ID = 1
 TRAJ_LENGTH = 10
 
@@ -38,9 +37,7 @@ def draw_bb(frame: np.ndarray, frame_id: int, bb_df: pd.DataFrame) -> None:
     green = (0, 255, 0)
 
     for _, row in bb.iterrows():
-        if row["class_id"] == PERSON_CLASS_ID:
-            line_color = green
-        elif row["class_id"] == BALL_CLASS_ID:
+        if row["class_id"] == BALL_CLASS_ID:
             line_color = red
         else:
             line_color = green
