@@ -5,9 +5,9 @@ import numpy as np
 
 ROOT = Path(__file__).parent.parent
 POS_CSVS = {
-    "out2": ROOT / "tracking_results/tracking_2d/positions/2d_positions0.csv",
-    "out4": ROOT / "tracking_results/tracking_2d/positions/2d_positions1.csv",
-    "out13": ROOT / "tracking_results/tracking_2d/positions/2d_positions2.csv",
+    "out2": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv",
+    "out4": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv",
 }
 VIDEOS = {
     "out2": ROOT / "videos/out2.mp4",
