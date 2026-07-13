@@ -8,11 +8,12 @@ def main() -> None:
     model = YOLO("yolov8s.pt")
     model.train(
         data=str(DATA),
-        epochs=100,
+        epochs=150,
         imgsz=(720, 1280),
         batch=8,
         device="cuda",
         cls=4.0,
+        patience=10
     )
 
 if __name__ == "__main__":
