@@ -10,8 +10,9 @@ def main() -> None:
     model.train(
         data=str(DATA),
         epochs=50,
-        imgsz=(720, 1280),
-        batch=16,
+        imgsz=3840,
+        rect=True,
+        batch=2,
         device="cuda",
         patience=15,
         mosaic=0.0,        
