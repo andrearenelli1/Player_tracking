@@ -11,7 +11,7 @@ def main() -> None:
         data=str(DATA),
         epochs=50,
         imgsz=(720, 1280),
-        batch=8,
+        batch=16,
         device="cuda",
         patience=20,
     )

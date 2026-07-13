@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-MODEL_PATH = ROOT / "src/yolo26n.pt"
+MODEL_PATH = ROOT / "runs/detect/train-5/weights/best.pt"
 DISPLAY    = False
 INFER_W    = 1920
 INFER_H    = 1088
