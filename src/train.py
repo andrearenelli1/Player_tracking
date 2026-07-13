@@ -8,7 +8,7 @@ def main() -> None:
     model = YOLO("yolov8s.pt")
     model.train(
         data=str(DATA),
-        epochs=150,
+        epochs=50,
         imgsz=(720, 1280),
         batch=8,
         device="cuda",
