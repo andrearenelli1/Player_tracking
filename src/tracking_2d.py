@@ -7,13 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-MODEL_PATH = ROOT / "runs/detect/train-5/weights/best.pt"
+MODEL_PATH = ROOT / "runs/detect/train/weights/best.pt"
 DISPLAY    = False
 INFER_W    = 1920
 INFER_H    = 1088
 TRAIL_LEN  = 30
-CONF       = 0.05
-CLASSES    = [1]
+CONF       = 0.1
+CLASSES    = [0]
 
 CAMERAS = [
     ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/positions/2d_positions0.csv"),

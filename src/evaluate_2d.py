@@ -15,7 +15,7 @@ TRACKING_CSVS = {
     "out4": ROOT / "tracking_results/tracking_2d/positions/2d_positions1.csv",
     "out13": ROOT / "tracking_results/tracking_2d/positions/2d_positions2.csv",
 }
-IOU_THRESHOLD = 0.5
+IOU_THRESHOLD = 0.05
 
 
 def load_gt(json_gt: Path) -> dict[str, pd.DataFrame]:
@@ -84,8 +84,8 @@ def compute_cost_mat(gt_df: pd.DataFrame, res_df: pd.DataFrame) -> tuple[torch.T
     res_df = uvwh_to_xyxy(res_df)
     gt_players = gt_df[gt_df["class_id"] == 0]["bbox"].tolist()
     gt_ball = gt_df[gt_df["class_id"] == 1]["bbox"].tolist()
-    res_players = res_df[res_df["class_id"] == 0]["bbox"].tolist()
-    res_ball = res_df[res_df["class_id"] == 1]["bbox"].tolist()
+    res_players = res_df[res_df["class_id"] == 1]["bbox"].tolist()
+    res_ball = res_df[res_df["class_id"] == 0]["bbox"].tolist()
     gt_pl_tensor = torch.tensor(gt_players, dtype=torch.float32)
     gt_bl_tensor = torch.tensor(gt_ball, dtype=torch.float32)
     res_pl_tensor = torch.tensor(res_players, dtype=torch.float32)
@@ -152,19 +152,18 @@ def main() -> None:
     tp_b, fp_b, fn_b, iou_sum_b = 0, 0, 0, 0.0
 
     for cam in gt_df:
-        common_frames = sorted(
-            set(gt_df[cam]["frame"]).intersection(track_df[cam]["frame_ds"]))
+        eval_frames = sorted(set(gt_df[cam]["frame"]))
         print(f"Processing {cam}")
 
-        for frame in common_frames:
-            print(f"frame: {frame} in {len(common_frames)}")
+        for frame in eval_frames:
+            print(f"frame: {frame} in {len(eval_frames)}")
             gt_frame  = gt_df[cam][gt_df[cam]["frame"] == frame]
             res_frame = track_df[cam][track_df[cam]["frame_ds"] == frame]
 
             n_gt_p  = len(gt_frame[gt_frame["class_id"] == 0])
             n_gt_b  = len(gt_frame[gt_frame["class_id"] == 1])
-            n_res_p = len(res_frame[res_frame["class_id"] == 0])
-            n_res_b = len(res_frame[res_frame["class_id"] == 1])
+            n_res_p = len(res_frame[res_frame["class_id"] == 1])
+            n_res_b = len(res_frame[res_frame["class_id"] == 0])
 
             player_mat, ball_mat = compute_cost_mat(gt_frame, res_frame)
 

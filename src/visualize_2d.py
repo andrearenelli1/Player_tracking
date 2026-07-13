@@ -14,7 +14,7 @@ VIDEOS = {
     "out4": ROOT / "videos/out4.mp4",
     "out13": ROOT / "videos/out13.mp4",
 }
-BALL_CLASS_ID = 1
+BALL_CLASS_ID = 0
 TRAJ_LENGTH = 10
 
 def compute_corners(u: float, v: float, w: float, h: float) -> dict[str, tuple[int, int]]:
