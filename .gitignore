@@ -1,5 +1,6 @@
 # Virtual enviroment
 venv/
+.venv/
 
 # Python cache
 __pycache__/
@@ -13,4 +14,4 @@ __pycache__/
 *.jpg
 
 # yolov8n pretrained model
-*.pt
+#*.pt

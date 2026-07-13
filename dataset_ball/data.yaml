@@ -1,6 +1,6 @@
-train: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/dataset_ball/train/images
-val: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/dataset_ball/valid/images
-test: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/dataset_ball/test/images
+train: /home/andrea/Player_tracking/dataset_ball/train/images
+val: /home/andrea/Player_tracking/dataset_ball/valid/images
+test: /home/andrea/Player_tracking/dataset_ball/test/images
 
 nc: 1
 names: ['ball']

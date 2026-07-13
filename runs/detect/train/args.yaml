@@ -1,12 +1,14 @@
 task: detect
 mode: train
 model: yolov8s.pt
-data: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/dataset/data.yaml
+data: /home/andrea/Player_tracking/dataset_ball/data.yaml
 epochs: 50
 time: null
-patience: 100
-batch: 4
-imgsz: 1280
+patience: 15
+batch: 16
+imgsz:
+- 720
+- 1280
 save: true
 save_period: -1
 cache: false
@@ -16,6 +18,7 @@ project: null
 name: train
 exist_ok: false
 pretrained: true
+cls_remap: true
 optimizer: auto
 verbose: true
 seed: 0
@@ -40,7 +43,7 @@ save_json: false
 conf: null
 iou: 0.7
 max_det: 300
-half: false
+quantize: null
 dnn: false
 plots: true
 end2end: null
@@ -65,7 +68,6 @@ line_width: null
 format: torchscript
 keras: false
 optimize: false
-int8: false
 dynamic: false
 simplify: true
 opset: null
@@ -78,8 +80,10 @@ weight_decay: 0.0005
 warmup_epochs: 3.0
 warmup_momentum: 0.8
 warmup_bias_lr: 0.1
+distill_model: null
+dis: 6.0
 box: 7.5
-cls: 2.0
+cls: 0.5
 cls_pw: 0.0
 dfl: 1.5
 pose: 12.0
@@ -92,13 +96,15 @@ hsv_s: 0.7
 hsv_v: 0.4
 degrees: 0.0
 translate: 0.1
-scale: 0.5
+scale:
+- 1.0
+- 1.3
 shear: 0.0
 perspective: 0.0
 flipud: 0.0
 fliplr: 0.5
 bgr: 0.0
-mosaic: 1.0
+mosaic: 0.0
 mixup: 0.0
 cutmix: 0.0
 copy_paste: 0.0
@@ -106,5 +112,5 @@ copy_paste_mode: flip
 auto_augment: randaugment
 erasing: 0.4
 cfg: null
-tracker: botsort.yaml
-save_dir: /home/m4rc0m55/marco/uni/magistrale/computer_vision/Player_tracking/runs/detect/train
+tracker: tracktrack.yaml
+save_dir: /home/andrea/Player_tracking/runs/detect/train
