@@ -16,9 +16,9 @@ CONF        = 0.1
 CLASSES     = [1]
 
 CAMERAS = [
-    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/positions/2d_positions0.csv"),
-    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/positions/2d_positions1.csv"),
-    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/positions/2d_positions2.csv"),
+    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv"),
+    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv"),
+    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv"),
 ]
 
 CSV_COLUMNS = ["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"]

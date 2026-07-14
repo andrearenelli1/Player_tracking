@@ -28,6 +28,20 @@ OUT_CSV = ROOT / "tracking_results/tracking_3d/3d_positions.csv"
 MAX_REPROJ_ERROR_PX = 30.0
 MIN_VOTES = 5
 
+# Bounding box di plausibilita' per scartare triangolazioni sbagliate (es. persone
+# fuori dal campo, o match cross-camera errati): campo 28x15m (origine al centro,
+# vedi CAL_POINTS in calibration.py) + un margine per panchine/arbitri a bordo campo.
+COURT_HALF_LENGTH = 14.0
+COURT_HALF_WIDTH = 7.5
+COURT_MARGIN = 5.0
+Z_MIN, Z_MAX = -1.0, 3.0
+
+
+def in_bounds(X, Y, Z):
+    return (-COURT_HALF_LENGTH - COURT_MARGIN <= X <= COURT_HALF_LENGTH + COURT_MARGIN
+            and -COURT_HALF_WIDTH - COURT_MARGIN <= Y <= COURT_HALF_WIDTH + COURT_MARGIN
+            and Z_MIN <= Z <= Z_MAX)
+
 
 def load_cameras(path):
     """Legge camera_calibration.csv -> dict camera -> {K, dist, P}."""
@@ -230,6 +244,8 @@ def main():
             views = [(P, uv) for _, P, uv in dets]
             cams_used = [cam_name for cam_name, _, _ in dets]
             X, Y, Z = triangulate_point(views)
+            if not in_bounds(X, Y, Z):
+                continue  # probabile match cross-camera errato o persona fuori dal campo
             rows.append([frame, gid, X, Y, Z, len(views), "+".join(cams_used)])
 
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
