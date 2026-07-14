@@ -5,7 +5,7 @@ ROOT = Path(__file__).parent.parent
 DATA = ROOT / "dataset/data.yaml"
 
 def main() -> None:
-    model = YOLO("yolov8s.pt")
+    model = YOLO("yolov8m.pt")
     model.train(
         data=str(DATA),
         epochs=50,

@@ -6,10 +6,10 @@ DATA = ROOT / "dataset_ball/data.yaml"
 
 
 def main() -> None:
-    model = YOLO("yolov8s.pt")
+    model = YOLO("yolov8m.pt")
     model.train(
         data=str(DATA),
-        epochs=50,
+        epochs=100,
         imgsz=3840,
         rect=True,
         batch=2,
