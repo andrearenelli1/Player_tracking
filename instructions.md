@@ -57,3 +57,7 @@ Reconstruct 3D trajectories of players (center of bounding boxes) and the ball u
 - Use standard metrics such as:
   - Mean Euclidean Distance (MED)
   - Root Mean Squared Error (RMSE)
+
+#### World frame origin
+
+As origin we are using the central point of the court, in particular z-axis pointing upwards, y-axis pointing towards the benches and the x-axis following the right hand rule. 
