@@ -7,10 +7,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-MODEL_PATH = ROOT / "runs/detect/train-2/weights/best.pt"
+MODEL_PATH = ROOT / "runs/detect/train-6/weights/best.pt"
 DISPLAY    = False
-INFER_W    = 1920
-INFER_H    = 1088
+INFER_W    = 3840
+INFER_H    = 2176
 TRAIL_LEN  = 30
 CONF       = 0.1
 CLASSES    = [0]
