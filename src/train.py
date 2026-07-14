@@ -5,11 +5,11 @@ ROOT = Path(__file__).parent.parent
 DATA = ROOT / "dataset/data.yaml"
 
 def main() -> None:
-    model = YOLO("yolov8s.pt")
+    model = YOLO("yolov8m.pt")
     model.train(
         data=str(DATA),
         epochs=50,
-        imgsz=(720, 1280),
+        imgsz=(2160, 3840),
         batch=16,
         device="cuda",
         cls=4.0,

@@ -1,11 +1,13 @@
 from pathlib import Path
 import shutil
+from PIL import Image
 
 ROOT        = Path(__file__).parent.parent
 SRC_DATASET = ROOT / "dataset"
 DST_DATASET = ROOT / "dataset_ball"
 
 SPLITS = ["train", "valid", "test"]
+NATIVE_SIZE = (3840, 2160)  # keep only real match-footage frames
 
 
 def already_prepared() -> bool:
@@ -29,6 +31,19 @@ def build_ball_dataset() -> None:
         dst_labels.mkdir(parents=True, exist_ok=True)
 
         for label_file in src_labels.glob("*.txt"):
+            # find corresponding image first — only keep native 4K frames
+            img_stem = label_file.stem
+            src_img = None
+            for ext in (".jpg", ".jpeg", ".png"):
+                candidate = src_imgs / (img_stem + ext)
+                if candidate.exists():
+                    src_img = candidate
+                    break
+            if src_img is None:
+                continue
+            if Image.open(src_img).size != NATIVE_SIZE:
+                continue
+
             lines = label_file.read_text().splitlines()
             ball_lines = []
             for line in lines:
@@ -44,14 +59,8 @@ def build_ball_dataset() -> None:
 
             # copy label
             (dst_labels / label_file.name).write_text("\n".join(ball_lines) + "\n")
-
-            # copy corresponding image
-            img_stem = label_file.stem
-            for ext in (".jpg", ".jpeg", ".png"):
-                src_img = src_imgs / (img_stem + ext)
-                if src_img.exists():
-                    shutil.copy2(src_img, dst_imgs / src_img.name)
-                    break
+            # copy image
+            shutil.copy2(src_img, dst_imgs / src_img.name)
 
     print("Ball dataset built.")
 
