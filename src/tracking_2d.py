@@ -7,7 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-MODEL_PATH = ROOT / "runs/detect/train/weights/best.pt"
+#MODEL_PATH = ROOT / "runs/detect/train/weights/best.pt"
+MODEL_PATH = "yolo26n.pt"
 DISPLAY    = False
 #INFER_W    = 3840
 #INFER_H    = 2176
@@ -15,7 +16,7 @@ INFER_W    = 1920
 INFER_H    = 1088
 TRAIL_LEN  = 30
 CONF       = 0.1
-CLASSES    = [0]
+CLASSES    = [0, 32]
 
 CAMERAS = [
     ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv"),
