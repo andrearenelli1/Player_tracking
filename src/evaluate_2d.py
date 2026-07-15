@@ -15,7 +15,7 @@ TRACKING_CSVS = {
     "out4": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv",
     "out13": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv",
 }
-IOU_THRESHOLD = 0.05
+IOU_THRESHOLD = 1e-5
 
 
 def load_gt(json_gt: Path) -> dict[str, pd.DataFrame]:

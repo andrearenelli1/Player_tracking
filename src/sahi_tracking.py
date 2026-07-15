@@ -7,18 +7,18 @@ from sahi.predict import get_sliced_prediction
 
 ROOT = Path(__file__).parent.parent
 
-MODEL_PATH  = ROOT / "runs/detect/train/weights/best.pt"
-DISPLAY     = True
-DISPLAY_W   = 1280
-DISPLAY_H   = 720
-SLICE_DIM = 300
-CONF        = 0.1
-CLASSES     = [1]
+MODEL_PATH  = ROOT / "runs/detect/train-6/weights/best.pt"
+DISPLAY     = False
+DISPLAY_W   = 3840
+DISPLAY_H   = 2176
+SLICE_DIM = 1500
+CONF        = 0.6
+CLASSES     = [0]
 
 CAMERAS = [
-    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv"),
-    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv"),
-    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv"),
+    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions0.csv"),
+    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions1.csv"),
+    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions2.csv"),
 ]
 
 CSV_COLUMNS = ["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"]
@@ -42,8 +42,8 @@ def track_video(model: AutoDetectionModel, cam_id: str, video_path: Path, csv_pa
             model,
             slice_height=SLICE_DIM,
             slice_width=SLICE_DIM,
-            overlap_height_ratio=0.2,
-            overlap_width_ratio=0.2,
+            overlap_height_ratio=0.1,
+            overlap_width_ratio=0.1,
         )
 
         for pred in result.object_prediction_list:
