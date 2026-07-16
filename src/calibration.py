@@ -66,11 +66,41 @@ CAL_POINTS = {
 
 
 def normalize_points(points):
-    """Hartley normalization: centroid at origin, mean distance sqrt(dim).
+    """
+    Hartley normalization.
+    It is used for numerical stability during the calibration.
+    The normalization is applied to both world points and image points.
 
-    points: (N, dim) array (dim=2 for image points, dim=3 for world points).
-    Returns (normalized_points, T) where T is the (dim+1, dim+1) homogeneous
-    transform such that normalized = (T @ [points | 1].T).T[:, :dim].
+    Procedure for normalization:
+    - take as input the manually annotated point (function is called 
+        once for world points and once for image points)
+    - compute the centroid as mean on x, y (and z for 3D points)
+    - subtract the centroid to each point in order to have zero mean
+    - compute the mean distance from the origin
+    - compute the scale factor as sqrt(2) (sqrt(3) for 3D case) over
+        the mean distance
+    - build the T matrix as:
+
+        |   s   0   -s*u    |
+        |   0   s   -s*v    |
+        |   0   0     1     |
+    
+        where s is the scale factor computed before and (u, v) is the
+        mean of (x, y) of all the points.
+        This matrix is for 2D case, if we have 3D points we need to add
+        one row and one col: so 3x3 identity * scale in top-left corner
+        and also -s*mean(z_coords) in the last col.
+    - build a matrix of dimension (n, 3) or (n, 4) for 2D or 3D, where
+        we stack all the points in the P matrix as: 
+
+        (x1, y1, z1, 1),
+        (x2, y2, z2, 1),
+        ...
+        (xn, yn, zn, 1)
+
+    - then we compute the normalized points as: N = ( T @ P.T ).T
+    - the output is made by the matricies: N, T  
+        
     """
     points = np.asarray(points, dtype=float)
     dim = points.shape[1]
@@ -90,10 +120,13 @@ def normalize_points(points):
 
 
 def normalize_cal_points(cal_points):
-    """Normalize world/image coords stored in a CAL_POINTS-style dict.
-
-    Returns a dict keyed like cal_points, each value a dict with
-    world/image normalized points plus their T_world/T_image transforms.
+    """
+    Takes as input the dict with both world points and image points
+    and calls the Hartley calibration for both of them.
+    Then builds a dict with the normalized points and the T matricies.
+    key -> {out2, out4, out13}
+    entries -> world: [x1, y1, z1], [x2, y2, z2], ...
+               image: [r1, c1], [r2, c2], ...
     """
     result = {}
     for key, entries in cal_points.items():
@@ -113,30 +146,41 @@ def normalize_cal_points(cal_points):
 
 
 def build_A(Xn, xn):
+    """
+    Build the A matrix to perform the direct linear transform (DLT).
+    Xn -> points in world
+    xn -> points on the image plane
+
+    The matrix A is:
+
+        | X   Y   Z   1   0   0   0   0   -uX   -uY   -uZ   -u |
+        | 0   0   0   0   X   Y   Z   1   -vX   -vY   -vZ   -v |
+
+    """
     Xn = np.asarray(Xn, float); xn = np.asarray(xn, float)
     N = len(Xn)
     Xt = np.hstack([Xn, np.ones((N, 1))])  # (N,4)
-    u = xn[:, 0:1]; v = xn[:, 1:2]          # (N,1)
+    u = xn[:, 0:1]
+    v = xn[:, 1:2]          # (N,1)
     Z = np.zeros((N, 4))
     A_u = np.hstack([Xt, Z, -u * Xt])       # (N,12) u equations
     A_v = np.hstack([Z, Xt, -v * Xt])       # (N,12) v equations
-    # interleave so rows of the same point stay adjacent
     A = np.empty((2 * N, 12))
-    A[0::2] = A_u; A[1::2] = A_v
+    A[0::2] = A_u
+    A[1::2] = A_v
     return A
 
 
 def build_p(A):
     """
-    Solves A @ p = 0 for the vector p (12,) and repacks it into P (3x4).
-    p = right singular vector associated with the smallest singular value of A,
-        i.e. the last row of Vt.  ||p|| = 1 (fixed by the SVD).
-
-    Returns:
-      P    : (3,4) projection matrix (in NORMALIZED coordinates)
-      p    : (12,) the solution vector
-      cond : ratio S[-2]/S[-1] (uniqueness margin of the null solution;
-             high = good, close to 1 = degenerate configuration)
+    Build the P matrix from matrix A using 
+    singular value decomposition (SVD).
+    From SVD we obtain U, Sigma, V.T
+    V contains the right singular vector, in particular we need 
+    the smallest since we are looking for A*h=0, so we are looking
+    for a vector h that is in the kernel of A.
+    We recall that h is a vector that contains all the entries of P,
+    so at the end we reshape it in order to get the matrix.
     """
     A = np.asarray(A, float)
     if A.shape[0] < 11:
@@ -151,11 +195,9 @@ def build_p(A):
 
 
 def denormalize_P(P_norm, T_world, T_image):
-    """Maps P from normalized coordinates back to the original ones.
-
-    P_norm acts on normalized points: x_n ~ P_norm @ X_n, with
-    x_n = T_image @ x and X_n = T_world @ X, so
-    T_image @ x ~ P_norm @ T_world @ X  =>  x ~ T_image^-1 @ P_norm @ T_world @ X
+    """
+    Transforms the P matrix into the original coordinates.
+    P = inv(T_image) * P_norm * T_world
     """
     P = np.linalg.inv(T_image) @ P_norm @ T_world
     P /= np.linalg.norm(P[2, :3])  # fix the scale: ||row3[:3]|| = 1
