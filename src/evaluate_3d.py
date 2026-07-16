@@ -14,19 +14,19 @@ ROOT = Path(__file__).parent.parent
 ANNOTATIONS = ROOT / "annotations/_annotations.coco.json"
 EVAL_OUT_CSV = ROOT / "tracking_results/tracking_3d/evaluation_3d.csv"
 
-# Le annotazioni sono a 5 fps: il nome file "out2_frame_0044.png" e' il 44-esimo
-# frame campionato (1-indexed) del video nativo a 25 fps.
+# Annotations are at 5 fps: the file name "out2_frame_0044.png" is the 44th
+# sampled frame (1-indexed) of the native 25 fps video.
 FRAME_NAME_RE = re.compile(r"(out\d+)_frame_(\d+)\.png")
 SAMPLE_STRIDE = 5
 
-# Una GT triangolata e una posizione ricostruita vengono accoppiate nello stesso
-# frame solo se la distanza e' entro questa soglia (metri); oltre e' considerato
-# un miss (nessun match), non un errore enorme che sporca la media.
+# A triangulated GT point and a reconstructed position are paired in the same
+# frame only if their distance is within this threshold (meters); beyond that
+# it's considered a miss (no match), not a huge error that skews the average.
 MAX_MATCH_DIST_M = 3.0
 
 
 def load_gt_detections(cams):
-    """Legge le bbox GT COCO -> DataFrame [frame, category, cam_name, u, v] (undistorted)."""
+    """Reads the GT COCO bboxes -> DataFrame [frame, category, cam_name, u, v] (undistorted)."""
     with open(ANNOTATIONS) as f:
         coco = json.load(f)
 
@@ -52,11 +52,11 @@ def load_gt_detections(cams):
 
 
 def triangulate_gt(gt_df, cams):
-    """Per ogni (frame, category) con >=2 camere, triangola la posizione 3d pseudo-GT."""
+    """For each (frame, category) with >=2 cameras, triangulates the pseudo-GT 3d position."""
     rows = []
     for (frame, category), group in gt_df.groupby(["frame", "category"]):
         if len(group) < 2:
-            continue  # servono almeno 2 viste
+            continue  # need at least 2 views
         views = [(cams[r.cam_name]["P"], (r.u, r.v)) for r in group.itertuples()]
         X, Y, Z = triangulate_point(views)
         rows.append([frame, category, X, Y, Z, len(views)])
@@ -64,7 +64,7 @@ def triangulate_gt(gt_df, cams):
 
 
 def match_and_score(gt_3d, recon_3d):
-    """Accoppia GT e ricostruzione frame per frame (Hungarian sulle distanze 3d)."""
+    """Pairs GT and reconstruction frame by frame (Hungarian on 3d distances)."""
     matches = []
     common_frames = sorted(set(gt_3d["frame"]) & set(recon_3d["frame"]))
     for frame in common_frames:
@@ -99,19 +99,19 @@ def main():
     med = matches["error_m"].mean()
     rmse = np.sqrt((matches["error_m"] ** 2).mean())
 
-    print(f"GT pseudo-3d points (>=2 viste): {n_gt}")
-    print(f"Matched con ricostruzione (soglia {MAX_MATCH_DIST_M} m): {n_matched} "
+    print(f"GT pseudo-3d points (>=2 views): {n_gt}")
+    print(f"Matched with reconstruction (threshold {MAX_MATCH_DIST_M} m): {n_matched} "
           f"({100 * n_matched / n_gt:.1f}% coverage)")
     print(f"MED  (Mean Euclidean Distance): {med:.3f} m")
     print(f"RMSE (Root Mean Squared Error): {rmse:.3f} m")
     print()
-    print("Errore medio per categoria:")
+    print("Average error per category:")
     print(matches.groupby("category")["error_m"].agg(["mean", "count"])
           .sort_values("mean").to_string())
 
     EVAL_OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     matches.to_csv(EVAL_OUT_CSV, index=False)
-    print(f"\nDettaglio match scritto in {EVAL_OUT_CSV}")
+    print(f"\nMatch details written to {EVAL_OUT_CSV}")
 
 
 if __name__ == "__main__":

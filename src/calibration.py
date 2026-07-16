@@ -118,9 +118,9 @@ def build_A(Xn, xn):
     Xt = np.hstack([Xn, np.ones((N, 1))])  # (N,4)
     u = xn[:, 0:1]; v = xn[:, 1:2]          # (N,1)
     Z = np.zeros((N, 4))
-    A_u = np.hstack([Xt, Z, -u * Xt])       # (N,12) equazioni u
-    A_v = np.hstack([Z, Xt, -v * Xt])       # (N,12) equazioni v
-    # interleave così le righe di uno stesso punto restano adiacenti
+    A_u = np.hstack([Xt, Z, -u * Xt])       # (N,12) u equations
+    A_v = np.hstack([Z, Xt, -v * Xt])       # (N,12) v equations
+    # interleave so rows of the same point stay adjacent
     A = np.empty((2 * N, 12))
     A[0::2] = A_u; A[1::2] = A_v
     return A
@@ -128,63 +128,63 @@ def build_A(Xn, xn):
 
 def build_p(A):
     """
-    Risolve A @ p = 0 per il vettore p (12,) e lo re-impacchetta in P (3x4).
-    p = vettore singolare destro associato al minimo valore singolare di A,
-        cioè l'ultima riga di Vt.  ||p|| = 1 (fissato dalla SVD).
+    Solves A @ p = 0 for the vector p (12,) and repacks it into P (3x4).
+    p = right singular vector associated with the smallest singular value of A,
+        i.e. the last row of Vt.  ||p|| = 1 (fixed by the SVD).
 
-    Ritorna:
-      P    : (3,4) matrice di proiezione (nelle coordinate NORMALIZZATE)
-      p    : (12,) il vettore soluzione
-      cond : rapporto S[-2]/S[-1] (margine di unicità della soluzione nulla;
-             alto = buono, vicino a 1 = configurazione degenere)
+    Returns:
+      P    : (3,4) projection matrix (in NORMALIZED coordinates)
+      p    : (12,) the solution vector
+      cond : ratio S[-2]/S[-1] (uniqueness margin of the null solution;
+             high = good, close to 1 = degenerate configuration)
     """
     A = np.asarray(A, float)
     if A.shape[0] < 11:
-        raise ValueError(f"Servono >=6 punti (>=12 righe): A ha {A.shape[0]} righe.")
+        raise ValueError(f"Need >=6 points (>=12 rows): A has {A.shape[0]} rows.")
 
     U, S, Vt = np.linalg.svd(A)
-    p = Vt[-1]                    # (12,) minimo valore singolare
-    P = p.reshape(3, 4)          # re-impacchetta PER RIGHE (coerente con build_A)
+    p = Vt[-1]                    # (12,) smallest singular value
+    P = p.reshape(3, 4)          # repack BY ROWS (consistent with build_A)
 
     cond = S[-2] / S[-1] if S[-1] > 0 else np.inf
     return P, p, cond
 
 
 def denormalize_P(P_norm, T_world, T_image):
-    """Riporta P dalle coordinate normalizzate a quelle originali.
+    """Maps P from normalized coordinates back to the original ones.
 
-    P_norm agisce su punti normalizzati: x_n ~ P_norm @ X_n, con
-    x_n = T_image @ x e X_n = T_world @ X, quindi
+    P_norm acts on normalized points: x_n ~ P_norm @ X_n, with
+    x_n = T_image @ x and X_n = T_world @ X, so
     T_image @ x ~ P_norm @ T_world @ X  =>  x ~ T_image^-1 @ P_norm @ T_world @ X
     """
     P = np.linalg.inv(T_image) @ P_norm @ T_world
-    P /= np.linalg.norm(P[2, :3])  # fissa la scala: ||riga3[:3]|| = 1
+    P /= np.linalg.norm(P[2, :3])  # fix the scale: ||row3[:3]|| = 1
     return P
 
 
 def decompose_P(P):
     """
-    Decompone P (3x4) denormalizzata in K, R, t con P = K [R | t].
-    Ritorna:
-      K : (3,3) intrinseci (triangolare superiore, K[2,2]=1, diagonale > 0)
-      R : (3,3) rotazione mondo->camera (ortogonale, det=+1)
-      t : (3,)  traslazione
-      C : (3,)  centro camera nel mondo (per la verifica di sanità)
+    Decomposes the denormalized P (3x4) into K, R, t with P = K [R | t].
+    Returns:
+      K : (3,3) intrinsics (upper triangular, K[2,2]=1, positive diagonal)
+      R : (3,3) world->camera rotation (orthogonal, det=+1)
+      t : (3,)  translation
+      C : (3,)  camera center in the world (for the sanity check)
     """
     P = np.asarray(P, float)
     M = P[:, :3]       # = K R
     p4 = P[:, 3]        # = K t
 
-    # RQ: M = K R  (K triangolare superiore, R ortogonale)
+    # RQ: M = K R  (K upper triangular, R orthogonal)
     K, R = rq(M)
 
-    # fix segni: diagonale di K positiva (D@D = I -> K R invariato)
+    # fix signs: positive K diagonal (D@D = I -> K R unchanged)
     s = np.sign(np.diag(K)); s[s == 0] = 1
     D = np.diag(s)
     K = K @ D
     R = D @ R
 
-    # normalizza scala: K[2,2] -> 1 (scala ANCHE p4 con lo stesso fattore)
+    # normalize scale: K[2,2] -> 1 (scale p4 by the SAME factor too)
     scale = K[2, 2]
     K = K / scale
     p4 = p4 / scale
@@ -192,12 +192,12 @@ def decompose_P(P):
     # t = inv(K) p4
     t = np.linalg.inv(K) @ p4
 
-    # rotazione propria: det(R) = +1
+    # proper rotation: det(R) = +1
     if np.linalg.det(R) < 0:
         R = -R
         t = -t
 
-    # centro camera nel mondo: C = -inv(M) p4_originale
+    # camera center in the world: C = -inv(M) original_p4
     C = -np.linalg.inv(M) @ P[:, 3]
 
     return K, R, t, C
@@ -224,10 +224,10 @@ def unpack(p):
 
 
 def project(K, R, t, dist, X):
-    """X: (N,3) mondo -> x: (N,2) pixel, con distorsione"""
-    Xc = (R @ X.T + t[:, None]).T          # coord camera
+    """X: (N,3) world -> x: (N,2) pixel, with distortion"""
+    Xc = (R @ X.T + t[:, None]).T          # camera coords
     z = Xc[:, 2]
-    xn = Xc[:, 0] / z                       # normalizzate
+    xn = Xc[:, 0] / z                       # normalized
     yn = Xc[:, 1] / z
     k1, k2, p1, p2 = dist
     r2 = xn**2 + yn**2
@@ -242,7 +242,7 @@ def project(K, R, t, dist, X):
 def reprojection_error(params, X, x_obs):
     K, R, t, dist = unpack(params)
     x_pred = project(K, R, t, dist, X)
-    return (x_pred - x_obs).ravel()          # residui 2N
+    return (x_pred - x_obs).ravel()          # 2N residuals
 
 
 def refine_camera(K_init, R_init, t_init, X, x_obs,
@@ -311,8 +311,8 @@ def main():
 
 
 def export_calibration_csv(results, path):
-    """Scrive su CSV, una riga per camera, tutte le matrici utili per il
-    tracking 3d: K, R, t, C (centro camera), dist, P (K [R|t]), rms."""
+    """Writes to CSV, one row per camera, all the matrices useful for
+    3d tracking: K, R, t, C (camera center), dist, P (K [R|t]), rms."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 

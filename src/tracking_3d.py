@@ -20,6 +20,7 @@ TRAJ_2D = {
 CAM_ID_TO_NAME = {"cam_0": "out2", "cam_1": "out4", "cam_2": "out13"}
 
 OUT_CSV = ROOT / "tracking_results/tracking_3d/3d_positions.csv"
+GLOBAL_ID_MAP_CSV = ROOT / "tracking_results/tracking_3d/global_id_map.csv"
 
 # Cross-camera association: a candidate match between two detections is accepted
 # only if their triangulated point reprojects within this many pixels in both
@@ -28,9 +29,9 @@ OUT_CSV = ROOT / "tracking_results/tracking_3d/3d_positions.csv"
 MAX_REPROJ_ERROR_PX = 30.0
 MIN_VOTES = 5
 
-# Bounding box di plausibilita' per scartare triangolazioni sbagliate (es. persone
-# fuori dal campo, o match cross-camera errati): campo 28x15m (origine al centro,
-# vedi CAL_POINTS in calibration.py) + un margine per panchine/arbitri a bordo campo.
+# Plausibility bounding box to discard wrong triangulations (e.g. people
+# outside the court, or wrong cross-camera matches): 28x15m court (origin at center,
+# see CAL_POINTS in calibration.py) + a margin for benches/referees at the court edge.
 COURT_HALF_LENGTH = 14.0
 COURT_HALF_WIDTH = 7.5
 COURT_MARGIN = 5.0
@@ -44,7 +45,7 @@ def in_bounds(X, Y, Z):
 
 
 def load_cameras(path):
-    """Legge camera_calibration.csv -> dict camera -> {K, dist, P}."""
+    """Reads camera_calibration.csv -> dict camera -> {K, dist, P}."""
     cams = {}
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
@@ -58,7 +59,7 @@ def load_cameras(path):
 
 
 def load_2d_trajectories():
-    """Legge le traiettorie 2d di ogni camera, indicizzate per frame (un frame puo' avere piu' oggetti)."""
+    """Reads the 2d trajectories for each camera, indexed by frame (a frame can have multiple objects)."""
     tracks = {}
     for cam_name, csv_path in TRAJ_2D.items():
         df = pd.read_csv(csv_path)
@@ -68,14 +69,14 @@ def load_2d_trajectories():
 
 
 def undistort_points(pts, K, dist):
-    """pts: (N,2) pixel distorti -> (N,2) pixel undistorted (stessa K)."""
+    """pts: (N,2) distorted pixels -> (N,2) undistorted pixels (same K)."""
     pts = np.asarray(pts, dtype=float).reshape(-1, 1, 2)
     undist = cv2.undistortPoints(pts, K, dist, P=K)
     return undist.reshape(-1, 2)
 
 
 def triangulate_point(views):
-    """views: lista di (P, (u,v)) da >=2 camere. Ritorna X (3,) via DLT multi-vista."""
+    """views: list of (P, (u,v)) from >=2 cameras. Returns X (3,) via multi-view DLT."""
     A = []
     for P, (u, v) in views:
         A.append(u * P[2] - P[0])
@@ -87,7 +88,7 @@ def triangulate_point(views):
 
 
 def reprojection_error(P_a, pt_a, P_b, pt_b):
-    """Errore di riproiezione (somma su entrambe le viste) del punto triangolato da una coppia."""
+    """Reprojection error (sum over both views) of the point triangulated from a pair."""
     X = triangulate_point([(P_a, pt_a), (P_b, pt_b)])
     Xh = np.append(X, 1.0)
 
@@ -116,8 +117,8 @@ class UnionFind:
 
 
 def vote_pairwise_matches(tracks, cams):
-    """Per ogni coppia di camere, conta quante volte ciascuna coppia di object_id
-    vince l'assegnamento Hungarian frame per frame con errore di riproiezione accettabile."""
+    """For each pair of cameras, counts how many times each pair of object_ids
+    wins the Hungarian assignment frame by frame with acceptable reprojection error."""
     cam_names = list(tracks.keys())
     votes = {}
     for i in range(len(cam_names)):
@@ -151,11 +152,11 @@ def vote_pairwise_matches(tracks, cams):
 
 
 def resolve_matches(votes):
-    """Tiene solo le coppie mutual-best con abbastanza voti, e le unisce in gruppi cross-camera.
+    """Keeps only mutual-best pairs with enough votes, and merges them into cross-camera groups.
 
-    Le fusioni vengono applicate in ordine di confidenza decrescente (piu' voti prima) e una
-    fusione viene scartata se creerebbe un gruppo con due object_id diversi della stessa camera
-    (puo' succedere per transitivita': A-B e B-C validi non implicano che A e C siano compatibili).
+    Merges are applied in decreasing order of confidence (more votes first), and a
+    merge is discarded if it would create a group with two different object_ids from the
+    same camera (can happen due to transitivity: A-B and B-C being valid doesn't imply A and C are compatible).
     """
     candidates = []
     for (cam_a, cam_b), pair_votes in votes.items():
@@ -184,7 +185,7 @@ def resolve_matches(votes):
         members_a = group_members.get(root_a, {key_a})
         members_b = group_members.get(root_b, {key_b})
         if {cam for cam, _ in members_a} & {cam for cam, _ in members_b}:
-            continue  # creerebbe due id della stessa camera nello stesso gruppo
+            continue  # would create two ids from the same camera in the same group
         uf.union(key_a, key_b)
         group_members.pop(root_a, None)
         group_members.pop(root_b, None)
@@ -193,7 +194,7 @@ def resolve_matches(votes):
 
 
 def assign_global_ids(tracks, uf):
-    """Raggruppa gli (cam, object_id) unificati e assegna un global_id sequenziale a ogni gruppo."""
+    """Groups the unified (cam, object_id) pairs and assigns a sequential global_id to each group."""
     groups = defaultdict(list)
     for cam_name, df in tracks.items():
         for object_id in df["object_id"].unique():
@@ -221,6 +222,11 @@ def main():
     uf = resolve_matches(votes)
     global_id_map = assign_global_ids(tracks, uf)
 
+    pd.DataFrame(
+        [(cam_name, object_id, global_id) for (cam_name, object_id), global_id in global_id_map.items()],
+        columns=["cam_name", "object_id", "global_id"],
+    ).to_csv(GLOBAL_ID_MAP_CSV, index=False)
+
     for cam_name, df in tracks.items():
         df["global_id"] = [global_id_map.get((cam_name, oid)) for oid in df["object_id"]]
 
@@ -240,19 +246,19 @@ def main():
 
         for gid, dets in detections.items():
             if len(dets) < 2:
-                continue  # servono almeno 2 viste per triangolare
+                continue  # need at least 2 views to triangulate
             views = [(P, uv) for _, P, uv in dets]
             cams_used = [cam_name for cam_name, _, _ in dets]
             X, Y, Z = triangulate_point(views)
             if not in_bounds(X, Y, Z):
-                continue  # probabile match cross-camera errato o persona fuori dal campo
+                continue  # likely a wrong cross-camera match or a person outside the court
             rows.append([frame, gid, X, Y, Z, len(views), "+".join(cams_used)])
 
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(
         rows, columns=["frame", "object_id", "X", "Y", "Z", "n_views", "cameras"]
     ).to_csv(OUT_CSV, index=False)
-    print(f"Scritte {len(rows)} posizioni 3d in {OUT_CSV}")
+    print(f"Wrote {len(rows)} 3d positions to {OUT_CSV}")
 
 
 if __name__ == "__main__":
