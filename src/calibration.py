@@ -147,7 +147,7 @@ def normalize_cal_points(cal_points):
 
 def build_A(Xn, xn):
     """
-    Build the A matrix to perform the direct linear transform (DLT).
+    Builds the A matrix to perform the direct linear transform (DLT).
     Xn -> points in world
     xn -> points on the image plane
 
@@ -200,7 +200,7 @@ def denormalize_P(P_norm, T_world, T_image):
     P = inv(T_image) * P_norm * T_world
     """
     P = np.linalg.inv(T_image) @ P_norm @ T_world
-    P /= np.linalg.norm(P[2, :3])  # fix the scale: ||row3[:3]|| = 1
+    P /= np.linalg.norm(P[2, :3])
     return P
 
 
@@ -212,36 +212,40 @@ def decompose_P(P):
       R : (3,3) world->camera rotation (orthogonal, det=+1)
       t : (3,)  translation
       C : (3,)  camera center in the world (for the sanity check)
+
+    In particular:
+     - Since P = K [R | t] = [KR | Kt] we divide the 2 components
+     - we use RQ decomposition on KR because it gives Rq -> upper 
+        triangular and Q -> orthogonal, they correspond to (K, R)
+     - Make the diagonal of K positive
+     - Normalize K and p4 (= Kt) to have K33 = 1
+     - Extract t using the inverse of K: t = inv(K) * p4
+     - Since for a rotation matrix det(R) = 1 but the result of RQ
+        decomposition can have: det(R) = -1 in case switch signs of
+        both R and K
+     - Compute the center of the camera as: C = -R.T @ t because 
+        Xc = RXw + t, where Xc is a point in camera coords and Xw is a 
+        point in world coords, so if we take the camera center Xc = 0 and we
+        obtain the position of the camera in the world
     """
     P = np.asarray(P, float)
     M = P[:, :3]       # = K R
     p4 = P[:, 3]        # = K t
-
-    # RQ: M = K R  (K upper triangular, R orthogonal)
     K, R = rq(M)
-
-    # fix signs: positive K diagonal (D@D = I -> K R unchanged)
-    s = np.sign(np.diag(K)); s[s == 0] = 1
+    s = np.sign(np.diag(K))
+    s[s == 0] = 1
     D = np.diag(s)
     K = K @ D
     R = D @ R
-
-    # normalize scale: K[2,2] -> 1 (scale p4 by the SAME factor too)
     scale = K[2, 2]
     K = K / scale
     p4 = p4 / scale
-
-    # t = inv(K) p4
     t = np.linalg.inv(K) @ p4
-
-    # proper rotation: det(R) = +1
     if np.linalg.det(R) < 0:
         R = -R
         t = -t
 
-    # camera center in the world: C = -inv(M) original_p4
-    C = -np.linalg.inv(M) @ P[:, 3]
-
+    C = -R.T @ t
     return K, R, t, C
 
 
@@ -315,6 +319,43 @@ def refine_camera(K_init, R_init, t_init, X, x_obs,
     return K, R, t, dist, rms
 
 
+
+
+def export_calibration_csv(results, path):
+    """
+    Writes to CSV, one row per camera, all the matrices useful for
+    3d tracking: K, R, t, C (camera center), dist, P (K [R|t]), rms.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = ["camera"]
+    fieldnames += [f"K{i}{j}" for i in range(3) for j in range(3)]
+    fieldnames += [f"R{i}{j}" for i in range(3) for j in range(3)]
+    fieldnames += [f"t{i}" for i in range(3)]
+    fieldnames += [f"C{i}" for i in range(3)]
+    fieldnames += ["k1", "k2", "p1", "p2"]
+    fieldnames += [f"P{i}{j}" for i in range(3) for j in range(4)]
+    fieldnames += ["rms"]
+
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for name, r in results.items():
+            row = {"camera": name, "rms": r["rms"]}
+            for i in range(3):
+                for j in range(3):
+                    row[f"K{i}{j}"] = r["K"][i, j]
+                    row[f"R{i}{j}"] = r["R"][i, j]
+            for i in range(3):
+                row[f"t{i}"] = r["t"][i]
+                row[f"C{i}"] = r["C"][i]
+            for i in range(3):
+                for j in range(4):
+                    row[f"P{i}{j}"] = r["P"][i, j]
+            row["k1"], row["k2"], row["p1"], row["p2"] = r["dist"]
+            writer.writerow(row)
+
 def main():
     normalized = normalize_cal_points(CAL_POINTS)
 
@@ -350,41 +391,6 @@ def main():
         results[name] = {"K": K, "R": R, "t": t, "C": C, "dist": dist, "P": P, "rms": rms}
 
     export_calibration_csv(results, CALIB_CSV)
-
-
-def export_calibration_csv(results, path):
-    """Writes to CSV, one row per camera, all the matrices useful for
-    3d tracking: K, R, t, C (camera center), dist, P (K [R|t]), rms."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    fieldnames = ["camera"]
-    fieldnames += [f"K{i}{j}" for i in range(3) for j in range(3)]
-    fieldnames += [f"R{i}{j}" for i in range(3) for j in range(3)]
-    fieldnames += [f"t{i}" for i in range(3)]
-    fieldnames += [f"C{i}" for i in range(3)]
-    fieldnames += ["k1", "k2", "p1", "p2"]
-    fieldnames += [f"P{i}{j}" for i in range(3) for j in range(4)]
-    fieldnames += ["rms"]
-
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for name, r in results.items():
-            row = {"camera": name, "rms": r["rms"]}
-            for i in range(3):
-                for j in range(3):
-                    row[f"K{i}{j}"] = r["K"][i, j]
-                    row[f"R{i}{j}"] = r["R"][i, j]
-            for i in range(3):
-                row[f"t{i}"] = r["t"][i]
-                row[f"C{i}"] = r["C"][i]
-            for i in range(3):
-                for j in range(4):
-                    row[f"P{i}{j}"] = r["P"][i, j]
-            row["k1"], row["k2"], row["p1"], row["p2"] = r["dist"]
-            writer.writerow(row)
-
 
 if __name__ == "__main__":
     main()
