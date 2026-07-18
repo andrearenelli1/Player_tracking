@@ -10,10 +10,15 @@ from torchvision.ops import box_iou
 STRIDE = 25 // 5
 ROOT = Path(__file__).parent.parent
 JSON_GT = ROOT / "annotations/_annotations.coco.json"
-TRACKING_CSVS = {
+PLAYER_TRACKING_CSVS = {
     "out2": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv",
     "out4": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv",
     "out13": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv",
+}
+BALL_TRACKING_CSVS = {
+    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions0.csv",
+    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions1.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions2.csv",
 }
 IOU_THRESHOLD = 1e-5
 
@@ -79,26 +84,12 @@ def uvwh_to_xyxy(df: pd.DataFrame) -> pd.DataFrame:
                      box[0] + box[2] / 2, box[1] + box[3] / 2])
     return df
 
-def compute_cost_mat(gt_df: pd.DataFrame, res_df: pd.DataFrame) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-    gt_df  = xywh_to_xyxy(gt_df)
-    res_df = uvwh_to_xyxy(res_df)
-    gt_players = gt_df[gt_df["class_id"] == 0]["bbox"].tolist()
-    gt_ball = gt_df[gt_df["class_id"] == 1]["bbox"].tolist()
-    res_players = res_df[res_df["class_id"] == 1]["bbox"].tolist()
-    res_ball = res_df[res_df["class_id"] == 0]["bbox"].tolist()
-    gt_pl_tensor = torch.tensor(gt_players, dtype=torch.float32)
-    gt_bl_tensor = torch.tensor(gt_ball, dtype=torch.float32)
-    res_pl_tensor = torch.tensor(res_players, dtype=torch.float32)
-    res_bl_tensor = torch.tensor(res_ball, dtype=torch.float32)
-    if len(gt_bl_tensor) != 0 and len(res_bl_tensor) != 0:
-        ball_cost_mat = box_iou(gt_bl_tensor, res_bl_tensor, "xyxy")
-    else: 
-        ball_cost_mat = None
-    if len(gt_pl_tensor) != 0 and len(res_pl_tensor) != 0:
-        players_cost_mat = box_iou(gt_pl_tensor, res_pl_tensor, "xyxy")
-    else: 
-        players_cost_mat = None
-    return players_cost_mat, ball_cost_mat
+def compute_iou_mat(gt_boxes: list, res_boxes: list) -> torch.Tensor | None:
+    if len(gt_boxes) == 0 or len(res_boxes) == 0:
+        return None
+    gt_tensor = torch.tensor(gt_boxes, dtype=torch.float32)
+    res_tensor = torch.tensor(res_boxes, dtype=torch.float32)
+    return box_iou(gt_tensor, res_tensor, "xyxy")
 
 def downsample_df(df: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     df_ds = {}
@@ -145,8 +136,9 @@ def print_metrics(label: str, tp: int, fp: int, fn: int, iou_sum: float) -> None
 
 
 def main() -> None:
-    gt_df    = load_gt(JSON_GT)
-    track_df = downsample_df(load_track(TRACKING_CSVS))
+    gt_df          = load_gt(JSON_GT)
+    player_track_df = downsample_df(load_track(PLAYER_TRACKING_CSVS))
+    ball_track_df   = downsample_df(load_track(BALL_TRACKING_CSVS))
 
     tp_p, fp_p, fn_p, iou_sum_p = 0, 0, 0, 0.0
     tp_b, fp_b, fn_b, iou_sum_b = 0, 0, 0, 0.0
@@ -157,20 +149,22 @@ def main() -> None:
 
         for frame in eval_frames:
             print(f"frame: {frame} in {len(eval_frames)}")
-            gt_frame  = gt_df[cam][gt_df[cam]["frame"] == frame]
-            res_frame = track_df[cam][track_df[cam]["frame_ds"] == frame]
+            gt_frame = xywh_to_xyxy(gt_df[cam][gt_df[cam]["frame"] == frame])
+            gt_players = gt_frame[gt_frame["class_id"] == 0]["bbox"].tolist()
+            gt_ball    = gt_frame[gt_frame["class_id"] == 1]["bbox"].tolist()
 
-            n_gt_p  = len(gt_frame[gt_frame["class_id"] == 0])
-            n_gt_b  = len(gt_frame[gt_frame["class_id"] == 1])
-            n_res_p = len(res_frame[res_frame["class_id"] == 1])
-            n_res_b = len(res_frame[res_frame["class_id"] == 0])
+            player_res_frame = uvwh_to_xyxy(player_track_df[cam][player_track_df[cam]["frame_ds"] == frame])
+            ball_res_frame   = uvwh_to_xyxy(ball_track_df[cam][ball_track_df[cam]["frame_ds"] == frame])
+            res_players = player_res_frame["bbox"].tolist()
+            res_ball    = ball_res_frame["bbox"].tolist()
 
-            player_mat, ball_mat = compute_cost_mat(gt_frame, res_frame)
+            player_mat = compute_iou_mat(gt_players, res_players)
+            ball_mat   = compute_iou_mat(gt_ball, res_ball)
 
-            tp, fp, fn, iou = match_boxes(player_mat, n_gt_p, n_res_p, IOU_THRESHOLD)
+            tp, fp, fn, iou = match_boxes(player_mat, len(gt_players), len(res_players), IOU_THRESHOLD)
             tp_p += tp; fp_p += fp; fn_p += fn; iou_sum_p += iou
 
-            tp, fp, fn, iou = match_boxes(ball_mat, n_gt_b, n_res_b, IOU_THRESHOLD)
+            tp, fp, fn, iou = match_boxes(ball_mat, len(gt_ball), len(res_ball), IOU_THRESHOLD)
             tp_b += tp; fp_b += fp; fn_b += fn; iou_sum_b += iou
 
     print("\n\n\n\n")

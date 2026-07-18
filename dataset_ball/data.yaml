@@ -1,6 +1,0 @@
-train: /home/andrea/Player_tracking/dataset_ball/train/images
-val: /home/andrea/Player_tracking/dataset_ball/valid/images
-test: /home/andrea/Player_tracking/dataset_ball/test/images
-
-nc: 1
-names: ['ball']

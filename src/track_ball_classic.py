@@ -23,8 +23,8 @@ SHADOW_THRESH = 200
 VAR_THRESHOLD = 80
 OPEN_KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
 CLOSE_KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))
-MIN_CIRCULARITY = 0.3
-MIN_ASPECT_RATIO = 0.3
+MIN_CIRCULARITY = 0.2
+MIN_ASPECT_RATIO = 0.2
 WHITE_SAT_MAX = 60
 WHITE_VAL_MIN = 180
 RED_SAT_MIN = 100
@@ -85,7 +85,7 @@ def track_video(cam_id: str, video_path: Path, csv_path: Path, min_area: float, 
             print(f"    skipping frame {frame_idx + 1}: {len(contours)} contours (> {MAX_CONTOURS})")
             continue
         candidates = [cnt for cnt in contours if min_area < cv2.contourArea(cnt) < max_area]
-        #candidates = [cnt for cnt in candidates if is_shape_like_ball(cnt)]
+        candidates = [cnt for cnt in candidates if is_shape_like_ball(cnt)]
         candidates = [cnt for cnt in candidates if has_ball_color_pattern(frame, cnt)]
 
         for cnt in candidates:
