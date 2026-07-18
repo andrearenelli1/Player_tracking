@@ -1,13 +1,25 @@
-from pathlib import Path
 import shutil
+from pathlib import Path
 from PIL import Image
+from roboflow import Roboflow
 
 ROOT        = Path(__file__).parent.parent
-SRC_DATASET = ROOT / "dataset"
+RAW_DATASET = ROOT / "dataset"
 DST_DATASET = ROOT / "dataset_ball"
 
 SPLITS = ["train", "valid", "test"]
-NATIVE_SIZE = (3840, 2160)  # keep only real match-footage frames
+NATIVE_SIZE   = (3840, 2160)  # keep only real match-footage frames
+BALL_CLASS_ID = 0             # "Ball" class in the raw Roboflow export
+
+
+def download_raw_dataset() -> None:
+    if any((RAW_DATASET / split / "images").exists() for split in SPLITS):
+        print("Raw dataset already downloaded — skipping.")
+        return
+    rf = Roboflow(api_key="8yoXaVAQ7fDNF0EEN8AF")
+    project = rf.workspace("tracking-rybv7").project("tracking_merged_all")
+    version = project.version(4)
+    version.download("yolo26", location=str(RAW_DATASET))
 
 
 def already_prepared() -> bool:
@@ -19,8 +31,8 @@ def already_prepared() -> bool:
 
 def build_ball_dataset() -> None:
     for split in SPLITS:
-        src_imgs    = SRC_DATASET / split / "images"
-        src_labels  = SRC_DATASET / split / "labels"
+        src_imgs    = RAW_DATASET / split / "images"
+        src_labels  = RAW_DATASET / split / "labels"
         dst_imgs    = DST_DATASET / split / "images"
         dst_labels  = DST_DATASET / split / "labels"
 
@@ -50,8 +62,7 @@ def build_ball_dataset() -> None:
                 parts = line.split()
                 if not parts:
                     continue
-                if int(parts[0]) == 1:
-                    # remap class 1 (ball) → class 0 (only class in ball model)
+                if int(parts[0]) == BALL_CLASS_ID:
                     ball_lines.append("0 " + " ".join(parts[1:]))
 
             if not ball_lines:
@@ -81,6 +92,7 @@ def main() -> None:
     if already_prepared():
         print("Ball dataset already prepared — skipping.")
         return
+    download_raw_dataset()
     build_ball_dataset()
     fix_yaml()
 

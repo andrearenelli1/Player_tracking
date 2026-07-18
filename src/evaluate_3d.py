@@ -1,13 +1,13 @@
 import json
 import re
-from collections import defaultdict
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-from scipy.optimize import linear_sum_assignment
 
+from collections import defaultdict
+from pathlib import Path
+from scipy.optimize import linear_sum_assignment
 from tracking_3d import CALIB_CSV, OUT_CSV, load_cameras, triangulate_point, undistort_points
+
 
 ROOT = Path(__file__).parent.parent
 
@@ -26,7 +26,9 @@ MAX_MATCH_DIST_M = 3.0
 
 
 def load_gt_detections(cams):
-    """Reads the GT COCO bboxes -> DataFrame [frame, category, cam_name, u, v] (undistorted)."""
+    """
+    Reads the GT COCO bboxes -> DataFrame [frame, category, cam_name, u, v] (undistorted).
+    """
     with open(ANNOTATIONS) as f:
         coco = json.load(f)
 
@@ -52,7 +54,9 @@ def load_gt_detections(cams):
 
 
 def triangulate_gt(gt_df, cams):
-    """For each (frame, category) with >=2 cameras, triangulates the pseudo-GT 3d position."""
+    """
+    For each (frame, category) with >=2 cameras, triangulates the pseudo-GT 3d position.
+    """
     rows = []
     for (frame, category), group in gt_df.groupby(["frame", "category"]):
         if len(group) < 2:
@@ -64,7 +68,9 @@ def triangulate_gt(gt_df, cams):
 
 
 def match_and_score(gt_3d, recon_3d):
-    """Pairs GT and reconstruction frame by frame (Hungarian on 3d distances)."""
+    """
+    Pairs GT and reconstruction frame by frame (Hungarian on 3d distances).
+    """
     matches = []
     common_frames = sorted(set(gt_3d["frame"]) & set(recon_3d["frame"]))
     for frame in common_frames:

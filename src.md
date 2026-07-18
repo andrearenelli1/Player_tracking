@@ -4,16 +4,10 @@ Multi-camera (out2, out4, out13) basketball player/ball tracking pipeline: datas
 
 ## Dataset preparation
 
-### `prepare_dataset.py`
-Downloads the annotated player/referee/ball dataset from Roboflow into `dataset/`. Remaps class IDs so the ball is class 1 and all persons (players/referees) collapse to class 0, then rewrites `dataset/data.yaml` accordingly (2 classes). Idempotent: skips the download/remap if `dataset/data.yaml` already shows the expected class names.
-
 ### `prepare_ball_dataset.py`
-Builds a ball-only dataset (`dataset_ball/`) from `dataset/`, used to train a dedicated ball detector. Keeps only native 4K (3840x2160) frames, filters each label file down to ball-class annotations (remapped to class 0), and writes a matching `data.yaml` (1 class). Idempotent like `prepare_dataset.py`.
+Downloads the annotated player/referee/ball dataset from Roboflow into `dataset/` (raw, untouched class IDs), then builds a ball-only dataset (`dataset_ball/`) from it for training a dedicated ball detector. Keeps only native 4K (3840x2160) frames, filters each label file down to the raw "Ball" class (remapped to class 0), and writes a matching `data.yaml` (1 class). Idempotent: skips the download if `dataset/` already has images, and skips the ball-dataset build if `dataset_ball/data.yaml` already shows the expected class name.
 
 ## Training
-
-### `train.py`
-Trains the person/ball YOLO model (YOLOv8m) on `dataset/data.yaml` at 3840x2160, 50 epochs, with a higher classification loss weight (`cls=4.0`) to counter class imbalance.
 
 ### `train_ball.py`
 Trains a dedicated ball-only YOLO model (YOLOv8m) on `dataset_ball/data.yaml`, full-resolution rectangular images, small batch size (2), mosaic augmentation disabled and scale augmentation biased up — tuned for a small, fast-moving object.

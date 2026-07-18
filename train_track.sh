@@ -20,9 +20,9 @@ source venv/bin/activate
 
 cd src
 
-echo "---------------- Executing file: prepare_dataset.py ----------------" 
+echo "---------------- Executing file: prepare_ball_dataset.py ----------------"
 
-python3 prepare_dataset.py
+python3 prepare_ball_dataset.py
 
 echo "---------------- Executing file: train.py ----------------"
 
