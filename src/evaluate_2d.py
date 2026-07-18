@@ -1,10 +1,10 @@
 import json
-from pathlib import Path
 import pandas as pd
-from scipy.optimize import linear_sum_assignment
 import numpy as np
 import re
 import torch
+from scipy.optimize import linear_sum_assignment
+from pathlib import Path
 from torchvision.ops import box_iou
 
 STRIDE = 25 // 5

@@ -1,7 +1,7 @@
-from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from sahi import AutoDetectionModel
 from sahi.predict import get_sliced_prediction
 

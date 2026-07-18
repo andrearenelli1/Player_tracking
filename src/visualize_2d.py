@@ -4,11 +4,18 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).parent.parent
-POS_CSVS = {
+PL_POS_CSVS = {
     "out2": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv",
     "out4": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv",
     "out13": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv",
 }
+
+BL_POS_CSVS = {
+    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions0.csv",
+    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions1.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions2.csv",
+}
+
 VIDEOS = {
     "out2": ROOT / "videos/out2.mp4",
     "out4": ROOT / "videos/out4.mp4",
@@ -60,8 +67,8 @@ def draw_traj(bb_df: pd.DataFrame, frame_id: int, row: pd.Series, color: tuple[i
     thickness = 4
     cv2.polylines(frame, points, True, color, thickness)
 
-def disp_video() -> None:
-    for (cam_id, vid), (csv_id, csv_file) in zip(VIDEOS.items(), POS_CSVS.items()):
+def disp_video(CSV_FILE) -> None:
+    for (cam_id, vid), (csv_id, csv_file) in zip(VIDEOS.items(), CSV_FILE.items()):
         cap = cv2.VideoCapture(vid)
         bb_df = pd.read_csv(csv_file)
         if not cap.isOpened():
@@ -80,15 +87,14 @@ def disp_video() -> None:
             cv2.imshow(cam_id, frame)
 
             if cv2.waitKey(25) &0xFF == ord('q'):
-                cap.release()
-                cv2.destroyAllWindows()
-                return
+                break
 
         cap.release()
         cv2.destroyAllWindows()
 
 def main() -> None:
-    disp_video()
+    disp_video(PL_POS_CSVS)
+    disp_video(BL_POS_CSVS)
 
 if __name__ == "__main__":
     main()
