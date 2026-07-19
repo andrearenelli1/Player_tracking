@@ -1,0 +1,415 @@
+% NOTE: this document uses the Springer LNCS class (llncs.cls) and the
+% splncs04 bibliography style. On Overleaf, start from the official
+% "Lecture Notes in Computer Science" template (or upload llncs.cls /
+% splncs04.bst alongside this file) so it compiles without missing-class
+% errors.
+\documentclass[runningheads]{llncs}
+
+% ---- Packages ----
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, urlcolor=blue}
+
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+
+\begin{document}
+
+\title{Multi-View Player and Ball Tracking with 3D Reconstruction\\
+       on a Basketball Court}
+
+\titlerunning{Multi-View Player and Ball Tracking with 3D Reconstruction}
+
+\author{Andrea Renelli \and Marco~\TODO{surname}}
+
+\authorrunning{A. Renelli and M. \TODO{surname}}
+
+\institute{University of Trento, Trento, Italy\\
+\email{andrea.renelli@studenti.unitn.it}, \email{marco.\TODO{surname}@studenti.unitn.it}}
+
+\maketitle
+
+\begin{abstract}
+We present a multi-camera pipeline for tracking players, referees and the
+ball during a basketball action recorded at the Sanbapolis facility, and for
+reconstructing their 3D trajectories via triangulation. Bounding boxes are
+annotated at 5\,fps on three synchronized camera views and used both to train
+the detectors and as ground truth. Players and referees are tracked
+independently per camera at the native 25\,fps with a generic YOLO detector
+and its built-in tracker, reaching Precision~$=0.976$, Recall~$=0.819$
+(F1~$=0.890$) and a mean matched IoU of $0.592$ on the annotated subset. The
+ball, which the generic detector fails to recover at this scale, is instead
+tracked with a YOLOv8m model fine-tuned on a ball-only dataset and evaluated
+with SAHI tiled inference (mAP@50~$=0.779$, mAP@50-95~$=0.430$ at training
+time). Cameras are calibrated from manually surveyed court correspondences
+via a normalized DLT solve refined with a distortion-aware nonlinear
+least-squares step (RMS reprojection error between $1.7$ and $5.5$\,px).
+2D tracks are re-identified across views with a vote-based consensus scheme
+and triangulated into a court-centered world frame; against pseudo-ground
+truth obtained by triangulating the annotated boxes, the reconstruction
+achieves a median Euclidean error of $0.43$\,m for players and referees, and
+$2.26$\,m for the ball, the latter limited by the small number of frames in
+which the ball is jointly visible in at least two views.
+\end{abstract}
+
+\keywords{multi-view tracking \and 3D triangulation \and camera calibration
+\and small object detection \and sports analytics}
+
+\section{Introduction}
+\label{sec:intro}
+
+This work addresses the Player Tracking project of the Computer Vision
+course: given a multi-camera setup at the Sanbapolis sports facility, the
+goal is to detect and track players, referees and the ball in each camera
+view, and to reconstruct their 3D trajectories by triangulation across
+views. One action was recorded from three fixed, synchronized cameras
+(\texttt{out2}, \texttt{out4}, \texttt{out13}) on a FIBA-regulation
+$28\times15$\,m basketball court. As a team of two, the mandatory scope
+covers annotation (task~1), 2D tracking with numerical evaluation
+(task~2/2a), and 3D triangulation with numerical evaluation (task~3/3a)
+using at least two camera views; the Unreal Engine visualization (task~4)
+is left as bonus future work (Sec.~\ref{sec:conclusion}).
+
+Two aspects of the setup make the problem harder than single-camera
+tracking. First, the ball is a small, fast-moving object that is frequently
+occluded or motion-blurred, and is easily missed by a detector tuned for
+person-scale objects. Second, associating a track across cameras requires a
+reliable geometric model of the scene: reusing a per-camera object ID
+across views is not possible, so cross-view correspondence has to be
+recovered from projective geometry rather than from appearance alone (no
+re-identification features were introduced in the interest of time).
+
+This report describes: (i) the annotation protocol and resulting dataset,
+(ii) a camera calibration procedure based on manually surveyed
+correspondences, (iii) a two-track 2D detection/tracking pipeline --- a
+generic detector for players/referees and a dedicated small-object pipeline
+for the ball --- and (iv) a cross-camera association and multi-view
+triangulation module, evaluated quantitatively against the annotated ground
+truth.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Dataset and Annotation}
+\label{sec:dataset}
+
+One basketball action was annotated from the three camera views on
+Roboflow, at 5\,fps, yielding $309$ frames and $2638$ bounding boxes over
+$16$ categories: a generic \texttt{person} catch-all class, \texttt{Ball},
+six jersey-numbered identities for the ``Red'' team (\texttt{Red\_2},
+\texttt{Red\_7}, \texttt{Red\_9}, \texttt{Red\_11}, \texttt{Red\_13},
+\texttt{Red\_23}), six for the ``White'' team, and two referees
+(\texttt{Refree\_1}, \texttt{Refree\_2}). Annotating individual jersey
+numbers, rather than a single \texttt{player} class, lets the 2D evaluation
+(Sec.~\ref{sec:2d_results}) and the pseudo-ground-truth triangulation
+(Sec.~\ref{sec:3d_results}) match a specific person across frames and
+cameras without needing a separate re-identification step. As required for
+a two-person team, at least two views (\texttt{out2}, \texttt{out4}) are
+used for the mandatory deliverable; the third view (\texttt{out13}) was
+additionally calibrated and used to strengthen cross-camera triangulation.
+
+\subsection{Camera Calibration}
+\label{sec:calibration}
+
+Each camera is calibrated independently from 12 manually surveyed
+world-to-image correspondences (court lines, free-throw markings and
+backboard/rim points), expressed in a court-centered world frame with the
+origin at the court center, the $z$-axis pointing upward, the $y$-axis
+towards the benches, and the $x$-axis completing a right-handed frame.
+
+Correspondences are Hartley-normalized~\cite{Hartley2004} (points
+centered at the centroid, mean distance $\sqrt{2}$ resp.\ $\sqrt{3}$ from
+the origin) before building the direct linear transform (DLT) system
+$A\mathbf{p}=0$, whose solution is the right singular vector of $A$
+associated with the smallest singular value. The resulting projection
+matrix $P_{\text{norm}}$ is de-normalized and factored as $P = K[R\,|\,t]$
+via RQ decomposition, fixing the sign ambiguity so that $K$ has a positive
+diagonal and $\det(R)=+1$.
+
+This linear estimate is then refined by nonlinear least squares
+(Levenberg--Marquardt with a Huber loss, via \texttt{scipy.optimize}),
+jointly optimizing the intrinsics, the extrinsics (rotation as a rotation
+vector), and a radial/tangential distortion model $(k_1,k_2,p_1,p_2)$
+against the reprojection error of the same correspondences. Table
+\ref{tab:calib} reports the final RMS reprojection error per camera.
+
+\begin{table}[t]
+  \caption{Camera calibration accuracy after nonlinear refinement.}
+  \label{tab:calib}
+  \centering
+  \begin{tabular}{lc}
+    \toprule
+    Camera & RMS reprojection error [px] \\
+    \midrule
+    \texttt{out2}  & 5.46 \\
+    \texttt{out4}  & 4.72 \\
+    \texttt{out13} & 1.67 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{2D Detection and Tracking}
+\label{sec:2d_tracking}
+
+\paragraph{Players and referees.} Each camera is processed independently
+at the native $25$\,fps with a generic YOLO detector (COCO classes
+\texttt{person} and \texttt{sports ball}), run on frames downscaled to
+$1920\times1088$, using the detector's built-in tracker
+(\texttt{persist=True}, a ByteTrack-style~\cite{Zhang2022} association) to
+maintain identities over time. A low confidence threshold ($0.1$) is used
+at detection time to favor recall, relying on the tracker to filter
+spurious detections through temporal persistence rather than discarding
+them upfront.
+
+\paragraph{Ball.} The same generic pipeline is largely blind to the ball
+at this scale (Sec.~\ref{sec:2d_results}): at $1920\times1088$ the ball
+covers only a handful of pixels and is frequently confused with background
+clutter or missed entirely. A first attempt used a classical
+color-and-motion baseline (HSV thresholding combined with frame
+differencing and an area filter) but proved too sensitive to lighting
+changes and motion blur to be usable. The final pipeline instead
+fine-tunes a YOLOv8m model on a ball-only subset of the annotated dataset
+at a high input resolution (\texttt{imgsz}$=3840$), and applies
+SAHI~\cite{Akyon2022} tiled inference at test time ($1500\times1500$\,px
+slices, $10\%$ overlap) so that the ball is detected at full resolution
+even though the source frames are far larger than the network input.
+
+\subsection{Cross-Camera Association and 3D Triangulation}
+\label{sec:3d_tracking}
+
+Per-camera 2D tracks are first undistorted using each camera's calibrated
+distortion coefficients. For every camera pair, and independently for
+every frame, candidate cross-camera matches between per-camera track IDs
+are scored by triangulating each pair of detections and measuring the
+combined reprojection error in both views; a Hungarian assignment then
+selects the best pairing per frame, keeping only pairs with reprojection
+error below $30$\,px. Because a single frame's assignment can be wrong
+(occlusions, symmetric jerseys), a track-level global identity is only
+formed from pairs that are \emph{mutually} the best match and that win the
+per-frame assignment in at least $5$ distinct frames across the whole
+sequence; consistent pairs are merged into cross-camera groups with a
+union-find structure, yielding one global ID per group.
+
+For every frame, detections sharing a global ID from at least two cameras
+are triangulated with a multi-view DLT solve. A court-sized plausibility
+box (the $28\times15$\,m court extended by a $5$\,m margin for players near
+the sideline, with height in $[-1,3]$\,m) discards triangulated points that
+fall outside it, which in practice removes the residual wrong cross-camera
+matches rather than genuine player positions.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Experimental Setup}
+
+All results are computed against the annotations described in
+Sec.~\ref{sec:dataset} (5\,fps ground truth, $309$ frames, $2638$ boxes).
+The 2D evaluation matches predicted and ground-truth boxes per frame with a
+Hungarian assignment on IoU and reports standard detection/tracking
+metrics (Precision, Recall, F1, and MOTP as the mean IoU over matched
+pairs). The 3D evaluation triangulates the annotated 2D boxes themselves
+(whenever a person or the ball is annotated in $\geq2$ views in the same
+frame) to obtain a pseudo-ground-truth 3D position, and matches it to the
+reconstructed trajectory with a Hungarian assignment on 3D Euclidean
+distance, accepting matches within $3$\,m.
+
+\TODO{This snapshot reports full results only for camera \texttt{out2};
+extend to \texttt{out4} once its 2D tracking pass has been re-run and
+committed.}
+
+\subsection{2D Tracking}
+\label{sec:2d_results}
+
+Table~\ref{tab:2d} reports player/referee tracking accuracy on camera
+\texttt{out2} over the $98$ annotated frames. The pipeline recovers the
+vast majority of annotated people (Recall~$=0.819$) with very few false
+positives (Precision~$=0.976$), and matched boxes overlap the ground truth
+well on average (MOTP~$=0.592$). On the same camera, the generic detector
+used for this table yields \emph{zero} matched ball detections out of
+$42$ annotated instances, which is the reason a dedicated pipeline was
+built for the ball (Sec.~\ref{sec:2d_tracking}).
+
+\begin{table}[t]
+  \caption{2D tracking accuracy for players/referees, camera
+  \texttt{out2}, 98 evaluated frames (609 matched detections).}
+  \label{tab:2d}
+  \centering
+  \begin{tabular}{lc}
+    \toprule
+    Metric & Value \\
+    \midrule
+    TP / FP / FN            & 609 / 15 / 135 \\
+    Precision                & 0.976 \\
+    Recall                   & 0.819 \\
+    F1                       & 0.890 \\
+    MOTP (mean IoU, matched) & 0.592 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Table~\ref{tab:ball_train} reports the training-time accuracy of the
+dedicated ball detector (best epoch out of $100$, selected by
+mAP@50-95). \TODO{Add a dedicated 2D bounding-box evaluation of the
+SAHI+YOLOv8m ball pipeline against the annotated ball boxes, analogous to
+Table~\ref{tab:2d}, once available.}
+
+\begin{table}[t]
+  \caption{Ball detector training accuracy (YOLOv8m fine-tuned on the
+  ball-only dataset, \texttt{imgsz}=3840, best epoch 47/100).}
+  \label{tab:ball_train}
+  \centering
+  \begin{tabular}{lc}
+    \toprule
+    Metric & Value \\
+    \midrule
+    Precision   & 0.821 \\
+    Recall      & 0.723 \\
+    mAP@50      & 0.779 \\
+    mAP@50-95   & 0.430 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{3D Reconstruction}
+\label{sec:3d_results}
+
+Over the full annotated sequence, $563$ reconstructed 3D points are
+matched to a pseudo-ground-truth position within the $3$\,m gate. Table
+\ref{tab:3d} reports the overall Mean Euclidean Distance (MED) and RMSE,
+together with the breakdown between players/referees and the ball. Players
+and referees are localized with a median error well under half a meter,
+consistent with the calibration accuracy of Table~\ref{tab:calib} and
+validating the DLT calibration and vote-based cross-camera association
+pipeline. The ball, by contrast, is matched in only $3$ frames of the
+sequence (out of $42$ annotated instances on \texttt{out2} alone), and its
+error is markedly higher; both numbers reflect the same underlying issue
+identified in Sec.~\ref{sec:2d_results} --- the ball is rarely detected
+in enough simultaneous views to be triangulated at all --- rather than a
+failure of the triangulation itself.
+
+\begin{table}[t]
+  \caption{3D reconstruction accuracy against pseudo-ground truth
+  (matches within 3\,m; $n$ = number of matched points).}
+  \label{tab:3d}
+  \centering
+  \begin{tabular}{lccc}
+    \toprule
+    & MED [m] & RMSE [m] & $n$ \\
+    \midrule
+    Overall                  & 0.443 & 0.710 & 563 \\
+    Players + referees       & 0.433 & 0.691 & 560 \\
+    Ball                     & 2.255 & --    & 3 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Table~\ref{tab:3d_breakdown} details the per-identity error among
+players/referees: most jersey IDs sit close to the pooled median, with
+\texttt{White\_16} and \texttt{Refree\_2} as the two outliers, both
+involved in the busiest, most occlusion-prone area of the court near the
+basket.
+
+\begin{table}[t]
+  \caption{3D error by identity (players and referees only), sorted by
+  mean error.}
+  \label{tab:3d_breakdown}
+  \centering
+  \begin{tabular}{lcc}
+    \toprule
+    Identity & Mean error [m] & $n$ \\
+    \midrule
+    \texttt{White\_27} & 0.316 & 49 \\
+    \texttt{White\_14} & 0.317 & 31 \\
+    \texttt{Red\_2}     & 0.323 & 76 \\
+    \texttt{Red\_23}    & 0.324 & 65 \\
+    \texttt{White\_2}   & 0.343 & 37 \\
+    \texttt{White\_34}  & 0.357 & 56 \\
+    \texttt{Red\_11}    & 0.359 & 48 \\
+    \texttt{Red\_7}     & 0.363 & 44 \\
+    \texttt{Refree\_1}  & 0.397 & 70 \\
+    \texttt{Red\_9}     & 0.630 & 13 \\
+    \texttt{White\_16}  & 0.861 & 63 \\
+    \texttt{Refree\_2}  & 1.939 & 8  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \fbox{\parbox{0.9\linewidth}{\centering\vspace{2.7cm}
+  \TODO{insert a frame grab from
+  \texttt{tracking\_results/tracking\_3d/3d\_positions.gif} (or a
+  re-rendered static plot) showing the reconstructed 3D trajectories over
+  the court}\vspace{2.7cm}}}
+  \caption{Reconstructed 3D trajectories of players, referees and the ball
+  over the annotated action, court-centered world frame.}
+  \label{fig:traj3d}
+\end{figure}
+
+\section{Conclusions and Future Work}
+\label{sec:conclusion}
+
+We built and evaluated a complete two-camera pipeline for player/referee
+and ball tracking with 3D reconstruction on a basketball court, covering
+the mandatory tasks for a two-person team: annotation, per-camera 2D
+tracking with numerical evaluation, and multi-view 3D triangulation with
+numerical evaluation. Players and referees are tracked reliably in 2D
+(F1~$=0.890$) and localized in 3D with sub-half-meter median error
+($0.43$\,m), validating both the calibration procedure and the
+vote-based cross-camera association scheme. The ball proved to be the
+hard case throughout the pipeline: the generic detector misses it almost
+entirely, the dedicated SAHI+YOLOv8m pipeline recovers it far better at
+training time but still yields few simultaneous multi-view detections, and
+its resulting 3D error is dominated by this scarcity of matches rather
+than by triangulation accuracy.
+
+Future work includes: extending the 2D and 3D evaluation to the second
+mandatory camera (\texttt{out4}) and consolidating results across all
+three calibrated views; a dedicated 2D bounding-box evaluation of the ball
+pipeline (Table~\ref{tab:ball_train} currently reports only training-time
+accuracy); improving ball recall across views (e.g., lower confidence with
+stronger cross-view geometric gating, or a temporal ball-specific
+tracker); trajectory-level 3D metrics for task~3a beyond static point
+matching (e.g., smoothness, ID switches); and, as a bonus, importing the
+reconstructed motion into Unreal Engine (task~4).
+
+\begin{thebibliography}{9}
+
+\bibitem{Hartley2004}
+R.~Hartley and A.~Zisserman,
+\emph{Multiple View Geometry in Computer Vision}, 2nd ed.
+Cambridge University Press, 2004.
+
+\bibitem{Akyon2022}
+F.~C.~Akyon, S.~O.~Altinuc, and A.~Temizel,
+``Slicing Aided Hyper Inference and Fine-tuning for Small Object
+Detection,''
+in \emph{Proc. IEEE Int. Conf. on Image Processing (ICIP)}, 2022,
+pp.\ 966--970.
+
+\bibitem{Zhang2022}
+Y.~Zhang, P.~Sun, Y.~Jiang, D.~Yu, F.~Weng, Z.~Yuan, P.~Luo, W.~Liu, and
+X.~Wang,
+``ByteTrack: Multi-Object Tracking by Associating Every Detection Box,''
+in \emph{Proc. European Conf. on Computer Vision (ECCV)}, 2022,
+pp.\ 1--21.
+
+\bibitem{Bernardin2008}
+K.~Bernardin and R.~Stiefelhagen,
+``Evaluating Multiple Object Tracking Performance: The CLEAR MOT
+Metrics,''
+\emph{EURASIP J. Image and Video Processing}, vol.\ 2008, 2008.
+
+\bibitem{Jocher2023}
+G.~Jocher, A.~Chaurasia, and J.~Qiu,
+``Ultralytics YOLO,'' 2023. [Software]
+\url{https://github.com/ultralytics/ultralytics}
+
+\end{thebibliography}
+
+\end{document}
