@@ -2,6 +2,7 @@ import json
 import pandas as pd
 import numpy as np
 import re
+import cv2
 import torch
 from scipy.optimize import linear_sum_assignment
 from pathlib import Path
@@ -10,6 +11,12 @@ from torchvision.ops import box_iou
 STRIDE = 25 // 5
 ROOT = Path(__file__).parent.parent
 JSON_GT = ROOT / "annotations/_annotations.coco.json"
+CALIB_DIR = ROOT / "calibrated_parameters"
+CALIB_FILES = {
+    "out2": CALIB_DIR / "cam_2.json",
+    "out4": CALIB_DIR / "cam_4.json",
+    "out13": CALIB_DIR / "cam_13.json",
+}
 PLAYER_TRACKING_CSVS = {
     "out2": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv",
     "out4": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv",
@@ -21,6 +28,30 @@ BALL_TRACKING_CSVS = {
     "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions2.csv",
 }
 IOU_THRESHOLD = 1e-5
+
+
+def load_calibration(calib_path: Path):
+    with open(calib_path) as f:
+        calib = json.load(f)
+    mtx = np.array(calib["mtx"], dtype=np.float64)
+    dist = np.array(calib["dist"], dtype=np.float64).reshape(-1)
+    return mtx, dist
+
+
+def rectify_bb(bbox: list, mtx: np.ndarray, dist: np.ndarray) -> list:
+    """bbox: [x, y, w, h] (top-left corner, raw/distorted pixels) -> rectified [x, y, w, h].
+
+    Undistorts the 4 corners (not just the center, since undistortion is
+    non-linear and would otherwise distort the box shape) and returns the
+    axis-aligned bounding box of the undistorted corners.
+    """
+    x, y, w, h = bbox
+    corners = np.array([[x, y], [x + w, y], [x, y + h], [x + w, y + h]],
+                        dtype=np.float32).reshape(-1, 1, 2)
+    undistorted = cv2.undistortPoints(corners, mtx, dist, P=mtx).reshape(-1, 2)
+    x_min, y_min = undistorted.min(axis=0)
+    x_max, y_max = undistorted.max(axis=0)
+    return [x_min, y_min, x_max - x_min, y_max - y_min]
 
 
 def load_gt(json_gt: Path) -> dict[str, pd.DataFrame]:
@@ -54,9 +85,11 @@ def load_gt(json_gt: Path) -> dict[str, pd.DataFrame]:
     df = df.drop("image_id", axis=1)
     out = {}
     for cam_name in df["cam_id"].unique():
-        out[cam_name] = df[df["cam_id"] == cam_name]
+        out[cam_name] = df[df["cam_id"] == cam_name].copy()
         out[cam_name] = out[cam_name].drop("cam_id", axis=1)
         out[cam_name]["frame"] = out[cam_name]["frame"] - 1
+        mtx, dist = load_calibration(CALIB_FILES[cam_name])
+        out[cam_name]["bbox"] = out[cam_name]["bbox"].apply(lambda box: rectify_bb(box, mtx, dist))
     return out
 
 def load_track(tracking_csvs: dict[str, Path]) -> dict[str, pd.DataFrame]:

@@ -14,6 +14,8 @@ MODEL_PATH = "yolo26n.pt"
 DISPLAY    = False
 INFER_W    = 1920
 INFER_H    = 1088
+VIDEO_W    = 3840
+VIDEO_H    = 2160
 TRAIL_LEN  = 30
 CONF       = 0.1
 CLASSES    = [0, 32]
@@ -49,7 +51,8 @@ def build_undistort_map(mtx: np.ndarray, dist: np.ndarray, width: int, height: i
     return map_x, map_y
 
 
-def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> None:
+def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path,
+                 map_x: np.ndarray, map_y: np.ndarray) -> None:
     cap = cv2.VideoCapture(str(video_path))
     total   = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     scale_x = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  / INFER_W
@@ -62,6 +65,7 @@ def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> N
         success, frame = cap.read()
         if not success:
             break
+        frame = cv2.remap(frame, map_x, map_y, interpolation=cv2.INTER_LINEAR)
 
         print(f"  {cam_id}  frame {frame_idx + 1} / {total}")
 
@@ -106,15 +110,9 @@ def main() -> None:
     model = YOLO(MODEL_PATH).to('cuda')
     for cam_id, video_path, csv_path, calib_path in CAMERAS:
         mtx, dist = load_calibration(calib_path)
+        map_x, map_y = build_undistort_map(mtx, dist, VIDEO_W, VIDEO_H)
 
-        cap = cv2.VideoCapture(str(video_path))
-        width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
-
-        map_x, map_y = build_undistort_map(mtx, dist, width, height)
-
-        track_video(model, cam_id, video_path, csv_path)
+        track_video(model, cam_id, video_path, csv_path, map_x, map_y)
 
 
 if __name__ == '__main__':
