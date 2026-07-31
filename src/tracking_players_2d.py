@@ -36,6 +36,19 @@ def load_calibration(calib_path: Path):
     return mtx, dist
 
 
+def build_undistort_map(mtx: np.ndarray, dist: np.ndarray, width: int, height: int):
+    """
+    Precomputes the pixel remap for rectification, same method as the given script 
+    rectified_videos.py: undistort a full-frame pixelgrid once (cv2.undistortPoints with P=mtx) and reuse it for every frame.
+    """
+    grid_x, grid_y = np.meshgrid(np.arange(width), np.arange(height))
+    pts = np.stack([grid_x, grid_y], axis=-1).astype(np.float32).reshape(-1, 1, 2)
+    undistorted = cv2.undistortPoints(pts, mtx, dist, P=mtx).reshape(height, width, 2)
+    map_x = undistorted[:, :, 0]
+    map_y = undistorted[:, :, 1]
+    return map_x, map_y
+
+
 def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> None:
     cap = cv2.VideoCapture(str(video_path))
     total   = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -93,6 +106,14 @@ def main() -> None:
     model = YOLO(MODEL_PATH).to('cuda')
     for cam_id, video_path, csv_path, calib_path in CAMERAS:
         mtx, dist = load_calibration(calib_path)
+
+        cap = cv2.VideoCapture(str(video_path))
+        width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+
+        map_x, map_y = build_undistort_map(mtx, dist, width, height)
+
         track_video(model, cam_id, video_path, csv_path)
 
 
