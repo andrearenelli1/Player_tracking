@@ -1,11 +1,13 @@
 from ultralytics import YOLO
 from collections import defaultdict
 import cv2
+import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+CALIB_DIR = ROOT / "calibrated_parameters"
 
 #MODEL_PATH = ROOT / "runs/detect/train/weights/best.pt"
 MODEL_PATH = "yolo26n.pt"
@@ -17,12 +19,21 @@ CONF       = 0.1
 CLASSES    = [0, 32]
 
 CAMERAS = [
-    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv"),
-    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv"),
-    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv"),
+    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv", CALIB_DIR / "cam_2.json"),
+    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv", CALIB_DIR / "cam_4.json"),
+    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv", CALIB_DIR / "cam_13.json"),
 ]
 
 CSV_COLUMNS = ["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"]
+
+
+def load_calibration(calib_path: Path):
+    """Reads mtx (K) and dist from a calibrated_parameters/cam_*.json file."""
+    with open(calib_path) as f:
+        calib = json.load(f)
+    mtx = np.array(calib["mtx"], dtype=np.float64)
+    dist = np.array(calib["dist"], dtype=np.float64).reshape(-1)
+    return mtx, dist
 
 
 def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> None:
@@ -80,7 +91,8 @@ def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path) -> N
 
 def main() -> None:
     model = YOLO(MODEL_PATH).to('cuda')
-    for i, (cam_id, video_path, csv_path) in enumerate(CAMERAS):
+    for cam_id, video_path, csv_path, calib_path in CAMERAS:
+        mtx, dist = load_calibration(calib_path)
         track_video(model, cam_id, video_path, csv_path)
 
 
