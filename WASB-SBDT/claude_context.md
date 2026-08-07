@@ -459,31 +459,100 @@ status` there) into the main project repo, as
   container) — readable but not `chown`-able by the host user without
   `sudo`, consistent with session 4's note about container-written files.
 
+## Session 6: fixed the broken gitlink, merged README into one project-wide doc
+
+- **Resolved item 1 from session 5's "Next step"**: after the user pushed
+  session 5's work, `WASB-SBDT/` showed up **empty on GitHub**. Root
+  cause: it had been committed as a git **gitlink** (index mode `160000`,
+  i.e. treated as a submodule reference) pointing at a commit inside its
+  own nested `.git`, with no `.gitmodules` to resolve it — GitHub had no
+  URL to fetch that content from. The user had already deleted
+  `WASB-SBDT/.git` by hand, but that alone didn't fix it: **the stale
+  gitlink stays in the git index regardless of whether `.git` exists on
+  disk**, so `git add .`/`git add WASB-SBDT` kept silently skipping the
+  directory entirely ("nothing to commit"). Fix: `git rm -r --cached
+  WASB-SBDT` (drops the gitlink entry from the index) then `git add
+  WASB-SBDT` again (now added as normal files). Caught two follow-on
+  issues before committing: (1) `git reset WASB-SBDT` (tried once
+  mid-fix) restored the stale gitlink from HEAD since the removal wasn't
+  committed yet — avoid `git reset`/`git checkout` on this path until
+  the fix is committed; (2) `WASB-SBDT/.gitignore` had vanished along
+  with the deleted `.git` (was only ever a working-tree file, apparently
+  lost in whatever cleanup preceded the `.git` deletion), so the first
+  `git add` staged the 6MB `pretrained_weights/wasb_basketball_best.pth.tar`
+  checkpoint too — recreated the `.gitignore` (same content as session
+  5's) before the real `git add`, checkpoint correctly excluded again.
+  Committed (17 real files, no submodule), then the user asked to also
+  drop the `Co-Authored-By: Claude` trailer from the commit message
+  since it had already been pushed — amended + `git push
+  --force-with-lease` to overwrite the pushed commit.
+- **`WASB-SBDT/README.md` deleted, merged into the main repo's root
+  `README.md`**: the user had asked earlier for Docker build/run
+  instructions "in the README" but they'd only been added to
+  `WASB-SBDT/README.md` — confusing, since the user was looking at the
+  root `README.md` (which only had the venv/pip setup blurb) and didn't
+  find them. Rather than just adding a pointer, the user asked for a
+  single well-made external README covering the whole repo. Root
+  `README.md` rewritten from scratch to document the **full pipeline**
+  (not just ball tracking): venv setup, repo/data layout, the
+  `cam_2`/`cam_4`/`cam_13` (calibration filenames) vs `cam_0`/`cam_1`/
+  `cam_2` (tracking ids) naming gotcha, all 6 pipeline steps (player 2D
+  tracking, ball 2D tracking [classic vs WASB], 2D eval, 3D tracking, 3D
+  eval, visualization), then the WASB/Docker section (content carried
+  over from the deleted `WASB-SBDT/README.md`, Cases A-D). Also
+  documented, while cross-checking each script, **three pre-existing
+  issues surfaced but explicitly NOT fixed** (out of scope, flagged for
+  the user instead):
+  1. `tracking_3d.py`/`evaluate_3d.py` still read `CALIB_CSV =
+     camera_calibration/camera_calibration.csv`, a path that no longer
+     exists (stale from before the calibration data moved to
+     `calibrated_parameters/*.json`) — steps 4-6 of the pipeline
+     currently don't run.
+  2. `ball_trajectories/` has both the classic tracker's
+     `2d_positions{0,1,2}.csv` and WASB's `out{2,4,13}_detections.csv`
+     (same schema since session 5, different filenames) — `evaluate_2d.py`/
+     `visualize_2d.py` only read the former by default, so WASB's ball
+     detections aren't actually wired into 2D eval/visualization yet.
+  3. `3D Tracking Material/rectified_videos.py` is course-provided
+     reference material (hardcoded `data/camera_data/...` paths, not
+     adapted to this repo) — not part of the working pipeline;
+     undistortion is already done inline elsewhere
+     (`calibrated_parameters/` + the tracking scripts).
+
 ## Next step (pending)
 
-1. **Fix git remote + integrate `WASB-SBDT`'s nested `.git`** with the
-   main repo (currently a plain copy with its own `.git`, showing as one
-   untracked dir in the main repo's `git status`; `origin` inside it
-   still points at the read-only upstream `nttcom/WASB-SBDT`) — decide
-   subtree vs plain copy (no submodule, see session 4) and commit
+1. ~~Fix git remote + integrate `WASB-SBDT`'s nested `.git`~~ — done in
+   session 6 (turned out to be a broken gitlink, not a real submodule;
+   fixed by re-adding as normal files, see session 6 above). `origin` of
+   the (now deleted) nested repo used to point at the read-only upstream
+   `nttcom/WASB-SBDT` — moot now, there's no nested repo anymore.
 2. ~~Dedupe `WASB-SBDT/annotations/` vs the main repo's own
    `annotations/`~~ — done in session 5
-3. Assess whether `out13`'s tiled 3x3 result (precision 0.90, recall
+3. **Wire WASB's ball CSVs into `evaluate_2d.py`/`visualize_2d.py`**
+   (session 6 finding #2): currently only the classic tracker's
+   `2d_positions{0,1,2}.csv` is read; point those two scripts at
+   `out{2,4,13}_detections.csv` (or rename the files) to actually
+   evaluate/visualize WASB's output on the main project's own evaluator
+4. **Fix `tracking_3d.py`/`evaluate_3d.py`'s `CALIB_CSV` path** (session
+   6 finding #1): needs adapting to read `calibrated_parameters/*.json`
+   instead of the no-longer-existing `camera_calibration/
+   camera_calibration.csv` — blocks pipeline steps 4-6 entirely until fixed
+5. Assess whether `out13`'s tiled 3x3 result (precision 0.90, recall
    0.19) is good enough for downstream use as-is, or whether it's worth
    building a lightweight temporal tracker to resolve the cross-tile
    ranking ambiguity and push recall higher
-4. With threshold 0.02 confirmed as reasonable on `out2`/`out4` (no
+6. With threshold 0.02 confirmed as reasonable on `out2`/`out4` (no
    tiling needed there), assess whether the achieved precision/recall
    (F1 ~0.42-0.59) is enough for downstream use, or whether fine-tuning
    is still needed (WASB's training code isn't public → consider TOTNet,
    which has one, or reverse-engineer WASB's training loop from the
    repo's issues)
-5. Possibly extend the evaluation to the full dataset (~2000 images) if
+7. Possibly extend the evaluation to the full dataset (~2000 images) if
    real training/fine-tuning is decided on
-6. Run `src/evaluate_2d.py` (main repo) now that `ball_trajectories/`
-   CSVs are in the schema it expects, to get real precision/recall/F1/
-   MOTP numbers for the ball on the main project's own evaluator (as
-   opposed to `eval_wasb.py`'s TrackNet-style numbers within this repo)
+8. Run `src/evaluate_2d.py` (main repo) — blocked on item 3 above for the
+   ball side — to get real precision/recall/F1/MOTP numbers on the main
+   project's own evaluator (as opposed to `eval_wasb.py`'s TrackNet-style
+   numbers within this repo)
 
 ## Reference files and paths (inside the container, root = `/workspace` = the
 MAIN PROJECT repo root as of session 5, not `WASB-SBDT`'s own root — see
@@ -526,8 +595,10 @@ Docker section below) — post session-5 reorg
   images, not tracked in git). Session 5: no longer duplicated inside
   `WASB-SBDT/` (was `WASB-SBDT/annotations/`, deleted; `run_eval.sh`/
   `README.md` updated to point here)
-- `WASB-SBDT/README.md` — rewritten for this fork's scope in session 4,
-  paths updated in session 5 for the new mount convention
+- `WASB-SBDT/README.md` — **deleted in session 6**: content merged into
+  the main repo's root `README.md` (one single project-wide usage doc,
+  covering the whole pipeline including this fork's Docker setup, not
+  just this subfolder) — see session 6 below
 - Removed entirely (session 4): `src/dataloaders/`, `src/datasets/`,
   `src/detectors/` (including the original `postprocessor.py` the blob
   decoding was ported from), `src/losses/`, `src/optimizers/`,

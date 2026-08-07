@@ -1,5 +1,220 @@
-# Player_tracking project for the Computer Vision course
+# Player Tracking — basketball, multi-camera (2D + 3D)
 
-### Packages
+Tracks players and the ball across 3 fixed camera views (`out2`, `out4`,
+`out13`), each processed independently in 2D, then fused into a single 3D
+reconstruction via triangulation. Player detection uses YOLO, ball
+detection has two interchangeable options (a classic CV baseline and a
+pretrained deep model, WASB/HRNet, run in Docker — see below).
 
-To install all the required packages create a virtual enviroment using: `python3 -m venv venv` and then source it using: `source venv/bin/activate`. Once the virtual enviroment is created you can install all the required packages using `pip install -r requirements.txt`.
+## Setup
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Player tracking (`tracking_players_2d.py`) hardcodes `.to('cuda')` — needs
+a CUDA-capable GPU + a matching torch build. Ball tracking's WASB option
+runs in its own Docker container (separate environment, see the dedicated
+section below); its classic-CV option needs nothing extra beyond the venv.
+
+## Repo layout
+
+- `videos/` — the 3 source `.mp4`s (`out2`, `out4`, `out13`), 25fps, 4K
+- `annotations/` — ground truth (Roboflow COCO export, 309 annotated
+  frames at 5fps) + the annotated images themselves
+- `calibrated_parameters/` — per-camera intrinsics (`cam_2.json`,
+  `cam_4.json`, `cam_13.json` — **named after the video**, e.g.
+  `cam_2.json` is `out2`'s calibration, not to be confused with the
+  `cam_0`/`cam_1`/`cam_2` tracking ids below — see the table further down)
+- `src/` — pipeline scripts (this README's Pipeline section)
+- `WASB-SBDT/` — the WASB/HRNet ball detector (own Docker setup, see below)
+- `tracking_results/tracking_2d/trajectories/` — player 2D positions
+- `tracking_results/tracking_2d/ball_trajectories/` — ball 2D positions
+- `tracking_results/tracking_2d/evaluation/` — 2D visual/metric outputs
+- `tracking_results/tracking_3d/` — 3D reconstruction + evaluation
+
+Camera-id convention used throughout `src/` and `WASB-SBDT/` (three
+different names for the same 3 views — worth keeping straight):
+
+| video | calibration file | tracking `cam_id` |
+|---|---|---|
+| `out2.mp4` | `calibrated_parameters/cam_2.json` | `cam_0` |
+| `out4.mp4` | `calibrated_parameters/cam_4.json` | `cam_1` |
+| `out13.mp4` | `calibrated_parameters/cam_13.json` | `cam_2` |
+
+## Pipeline
+
+Run from the repo root, inside the venv, in this order:
+
+**1. Player 2D tracking (YOLO)**
+```bash
+python3 src/tracking_players_2d.py
+```
+→ `tracking_results/tracking_2d/trajectories/2d_positions{0,1,2}.csv`
+(one file per camera, columns `frame,cam_id,class_id,object_id,u,v,w,h`).
+
+**2. Ball 2D tracking** — pick one:
+- **Classic CV baseline** (background subtraction, no GPU, weaker recall):
+  ```bash
+  python3 src/track_ball_classic.py
+  ```
+  → `tracking_results/tracking_2d/ball_trajectories/2d_positions{0,1,2}.csv`,
+  same schema as step 1.
+- **WASB/HRNet** (pretrained deep model, better recall/precision,
+  needs Docker + GPU — see the dedicated section below):
+  ```bash
+  sh WASB-SBDT/src/run_tracking.sh   # from inside the container
+  ```
+  → `tracking_results/tracking_2d/ball_trajectories/out{2,4,13}_detections.csv`
+  + overlay videos in `tracking_results/tracking_2d/evaluation/`.
+
+  ⚠️ **`evaluate_2d.py`/`visualize_2d.py` currently read the classic
+  tracker's `2d_positions{0,1,2}.csv`, not WASB's `out*_detections.csv`**
+  — same schema, different filename, not wired together by default. If
+  you want to evaluate/visualize the WASB output instead, point those
+  scripts' `BALL_TRACKING_CSVS`/`BL_POS_CSVS` dicts at the
+  `out*_detections.csv` files (or rename them).
+
+**3. 2D evaluation** (players + ball, IoU-matched against ground truth):
+```bash
+python3 src/evaluate_2d.py
+```
+Prints precision/recall/F1/MOTP to stdout — **does not save a file**.
+
+**4. 3D tracking** (triangulates matched detections across cameras):
+```bash
+python3 src/tracking_3d.py
+```
+→ `tracking_results/tracking_3d/3d_positions.csv` + `global_id_map.csv`.
+⚠️ **Currently broken**: expects a calibration file at
+`camera_calibration/camera_calibration.csv`, which doesn't exist in this
+repo (stale path from before the calibration data moved to
+`calibrated_parameters/*.json` — see the layout section above). Needs
+adapting `load_cameras()`/`CALIB_CSV` in `tracking_3d.py` before this step
+runs.
+
+**5. 3D evaluation**:
+```bash
+python3 src/evaluate_3d.py
+```
+→ `tracking_results/tracking_3d/evaluation_3d.csv`. Same broken
+`CALIB_CSV` dependency as step 4.
+
+**6. Visualization**:
+```bash
+python3 src/visualize_2d.py            # live overlay of player+ball boxes per video (press q to quit)
+python3 src/visualize_3d.py            # static 3D plot -> tracking_results/tracking_3d/3d_positions.png
+python3 src/visualize_3d.py --animate --save   # animated -> .../3d_positions.gif
+```
+
+## Ball tracking with WASB/HRNet (Docker)
+
+`WASB-SBDT/` is a trimmed fork of
+[nttcom/WASB-SBDT](https://github.com/nttcom/WASB-SBDT) (BMVC2023),
+kept to just its basketball checkpoint for zero-shot ball detection —
+see `WASB-SBDT/claude_context.md` for the full history (why it was
+picked, threshold calibration, tiling for wide shots).
+
+### Get the image
+
+No registry — build it locally, and fetch the one checkpoint it needs:
+
+```bash
+cd WASB-SBDT
+docker build -t wasb-sbdt .
+cd src && sh setup_scripts/setup_weights.sh   # downloads pretrained_weights/wasb_basketball_best.pth.tar (~6MB)
+cd ../..
+```
+Rebuild (`docker build -t wasb-sbdt .` again) any time `WASB-SBDT/Dockerfile`
+changes — an existing image does not pick up `Dockerfile` edits on its own.
+
+### Start the container
+
+The container mounts the **main repo root** (not `WASB-SBDT/`'s own root),
+so it can reach the shared `videos/` and write into `tracking_results/`:
+
+```bash
+docker run -it --gpus all -v $(pwd):/workspace -w /workspace/WASB-SBDT/src wasb-sbdt   # first time / clean container
+docker start -ai <container_name>                                                      # resume later, keeps anything installed by hand
+```
+Verify the mount matches before trusting any output:
+`docker inspect <container> --format '{{json .Mounts}}'`.
+
+All commands below run **inside the container**, from
+`/workspace/WASB-SBDT/src`.
+
+### Running it — the different cases
+
+**Case A — full pipeline: track all 3 videos + evaluate against ground truth**
+```bash
+sh run_tracking.sh   # -> tracking_results/tracking_2d/ball_trajectories/*.csv, .../evaluation/*_result.mp4
+sh run_eval.sh        # -> tracking_results/tracking_2d/evaluation/eval_results.csv
+```
+
+**Case B — track a single video by hand**
+```bash
+python3 track_ball.py \
+    --video /workspace/videos/out4.mp4 \
+    --checkpoint /workspace/WASB-SBDT/pretrained_weights/wasb_basketball_best.pth.tar \
+    --config /workspace/WASB-SBDT/src/configs/model/wasb.yaml \
+    --cam-id cam_1 \
+    --csv-output /workspace/tracking_results/tracking_2d/ball_trajectories/out4_detections.csv \
+    --output /workspace/tracking_results/tracking_2d/evaluation/out4_result.mp4
+```
+`out13` needs `--tile-n 3 --mask-rect 3700,500,3840,680` added (full-court
+shot, ball otherwise too small after the mandatory resize — see
+`claude_context.md`); `out2`/`out4` work with plain defaults.
+
+**Case C — evaluate only, against ground truth** (re-runs inference itself,
+does not read the CSVs from Case A/B):
+```bash
+python3 eval_wasb.py \
+    --annotations /workspace/annotations/_annotations.coco.json \
+    --videos-dir /workspace/videos \
+    --checkpoint /workspace/WASB-SBDT/pretrained_weights/wasb_basketball_best.pth.tar \
+    --config /workspace/WASB-SBDT/src/configs/model/wasb.yaml \
+    --tile-videos out13 --tile-n 3 --mask-rect out13:3700,500,3840,680 \
+    --output-csv /workspace/tracking_results/tracking_2d/evaluation/eval_results.csv
+```
+Add `--overlay-dir <path>` to also save per-frame TP/FN/FP2/FP1/TN images
+for visual inspection; `--exclude-videos out13` to score only the
+close-up views.
+
+**Case D — inspect confidence on a video without producing final output**
+(threshold calibration / quick sanity check):
+```bash
+python3 track_ball.py \
+    --video /workspace/videos/out2.mp4 \
+    --checkpoint /workspace/WASB-SBDT/pretrained_weights/wasb_basketball_best.pth.tar \
+    --config /workspace/WASB-SBDT/src/configs/model/wasb.yaml \
+    --cam-id cam_0 \
+    --debug-dir /workspace/tracking_results/tracking_2d/evaluation/debug_out2
+```
+
+## Known issues (as of this writing)
+
+- **`tracking_3d.py`/`evaluate_3d.py`** expect
+  `camera_calibration/camera_calibration.csv`, which no longer exists
+  (see step 4/5 above) — steps 4-6 of the pipeline don't currently run.
+- **`ball_trajectories/` naming**: `evaluate_2d.py`/`visualize_2d.py`
+  read the classic tracker's `2d_positions{0,1,2}.csv` by default, not
+  WASB's `out*_detections.csv` (see step 2 above).
+- **`3D Tracking Material/rectified_videos.py`** is course-provided
+  reference material with hardcoded paths (`data/camera_data/...`) not
+  adapted to this repo — not part of the working pipeline.
+  `track_ball_classic.py`/`tracking_players_2d.py` already do their own
+  undistortion inline using `calibrated_parameters/`.
+
+## Citation
+
+WASB model and pretrained weights from:
+```
+@inproceedings{tarashima2023wasb,
+	title={Widely Applicable Strong Baseline for Sports Ball Detection and Tracking},
+	author={Tarashima, Shuhei and Haq, Muhammad Abdul and Wang, Yushan and Tagawa, Norio},
+	booktitle={BMVC},
+	year={2023}
+}
+```
