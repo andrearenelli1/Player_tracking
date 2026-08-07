@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# heavy data/artifacts, not tracked (kept locally, fetched with
+# setup_scripts/setup_weights.sh)
+pretrained_weights/
+# videos/ and annotations/ used to live here too (deduped in session 5,
+# now only at the main repo root)
