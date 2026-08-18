@@ -1,1 +1,81 @@
 === out2 (cam_0) ===
+[INFO] Using device: cuda
+[INFO] frames_in=3, input size=512x288
+[INFO] Video: 3840x2160, 25.0 fps, 525 frames
+[INFO] Processed 100/525 frames
+[INFO] Processed 200/525 frames
+[INFO] Processed 300/525 frames
+[INFO] Processed 400/525 frames
+[INFO] Processed 500/525 frames
+[INFO] Output video saved to: /workspace/tracking_results/tracking_2d/evaluation/out2_result.mp4
+[INFO] Detections CSV saved to: /workspace/tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out2.csv (161/523 processed frames had a ball above threshold; 2 frame(s) at the very start/end of the video have no row at all -- the sliding window needs a frame before and after to have a center)
+[RESULT] Threshold=0.02: Frames processed: 523, ball detected: 161 (30.8%)
+
+[THRESHOLD SWEEP] Fraction of frames above each confidence threshold:
+  threshold=0.001  -> 100.0%  (523/523 frames)
+  threshold=0.003  -> 100.0%  (523/523 frames)
+  threshold=0.005  -> 100.0%  (523/523 frames)
+  threshold=0.01   -> 100.0%  (523/523 frames)
+  threshold=0.02   ->  30.8%  (161/523 frames)
+  threshold=0.05   ->   8.4%  (44/523 frames)
+  threshold=0.1    ->   3.6%  (19/523 frames)
+  threshold=0.2    ->   1.7%  (9/523 frames)
+  threshold=0.3    ->   0.8%  (4/523 frames)
+  threshold=0.5    ->   0.2%  (1/523 frames)
+
+[CONFIDENCE STATISTICS] min=0.0114 max=0.5437 mean=0.0274 median=0.0134
+=== out4 (cam_1) ===
+[INFO] Using device: cuda
+[INFO] frames_in=3, input size=512x288
+[INFO] Video: 3840x2160, 25.0 fps, 525 frames
+[INFO] Processed 100/525 frames
+[INFO] Processed 200/525 frames
+[INFO] Processed 300/525 frames
+[INFO] Processed 400/525 frames
+[INFO] Processed 500/525 frames
+[INFO] Output video saved to: /workspace/tracking_results/tracking_2d/evaluation/out4_result.mp4
+[INFO] Detections CSV saved to: /workspace/tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out4.csv (124/523 processed frames had a ball above threshold; 2 frame(s) at the very start/end of the video have no row at all -- the sliding window needs a frame before and after to have a center)
+[RESULT] Threshold=0.02: Frames processed: 523, ball detected: 124 (23.7%)
+
+[THRESHOLD SWEEP] Fraction of frames above each confidence threshold:
+  threshold=0.001  -> 100.0%  (523/523 frames)
+  threshold=0.003  -> 100.0%  (523/523 frames)
+  threshold=0.005  -> 100.0%  (523/523 frames)
+  threshold=0.01   ->  55.4%  (290/523 frames)
+  threshold=0.02   ->  23.7%  (124/523 frames)
+  threshold=0.05   ->  12.6%  (66/523 frames)
+  threshold=0.1    ->   5.9%  (31/523 frames)
+  threshold=0.2    ->   3.3%  (17/523 frames)
+  threshold=0.3    ->   3.1%  (16/523 frames)
+  threshold=0.5    ->   2.7%  (14/523 frames)
+
+[CONFIDENCE STATISTICS] min=0.0086 max=0.8219 mean=0.0401 median=0.0108
+=== out13 (cam_2, tiled 3x3 + mask on the corner-graphic confuser, see claude_context.md) ===
+[INFO] Active ROI masks: [(3700.0, 500.0, 3840.0, 680.0)]
+[INFO] Using device: cuda
+[INFO] frames_in=3, input size=512x288
+[INFO] Video: 3840x2160, 25.0 fps, 525 frames
+[INFO] Tiled inference: 3x3 = 9 tiles
+[INFO] Processed 100/525 frames
+[INFO] Processed 200/525 frames
+[INFO] Processed 300/525 frames
+[INFO] Processed 400/525 frames
+[INFO] Processed 500/525 frames
+[INFO] Output video saved to: /workspace/tracking_results/tracking_2d/evaluation/out13_result.mp4
+[INFO] Detections CSV saved to: /workspace/tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out13.csv (523/523 processed frames had a ball above threshold; 2 frame(s) at the very start/end of the video have no row at all -- the sliding window needs a frame before and after to have a center)
+[RESULT] Threshold=0.02: Frames processed: 523, ball detected: 523 (100.0%)
+
+[THRESHOLD SWEEP] Fraction of frames above each confidence threshold:
+  threshold=0.001  -> 100.0%  (523/523 frames)
+  threshold=0.003  -> 100.0%  (523/523 frames)
+  threshold=0.005  -> 100.0%  (523/523 frames)
+  threshold=0.01   -> 100.0%  (523/523 frames)
+  threshold=0.02   -> 100.0%  (523/523 frames)
+  threshold=0.05   ->  19.7%  (103/523 frames)
+  threshold=0.1    ->  10.7%  (56/523 frames)
+  threshold=0.2    ->   7.5%  (39/523 frames)
+  threshold=0.3    ->   6.1%  (32/523 frames)
+  threshold=0.5    ->   4.2%  (22/523 frames)
+
+[CONFIDENCE STATISTICS] min=0.0228 max=0.8647 mean=0.0781 median=0.0333
+=== done: CSVs written to /workspace/tracking_results/tracking_2d/ball_trajectories, overlay videos to /workspace/tracking_results/tracking_2d/evaluation ===

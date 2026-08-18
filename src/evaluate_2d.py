@@ -22,10 +22,19 @@ PLAYER_TRACKING_CSVS = {
     "out4": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv",
     "out13": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv",
 }
+BALL_TRACKING_CSVS_CLASSIC = {
+    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_classic_out2.csv",
+    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_classic_out4.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_classic_out13.csv",
+}
+BALL_TRACKING_CSVS_WASB = {
+    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out2.csv",
+    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out4.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out13.csv",
+}
 BALL_TRACKING_CSVS = {
-    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/out2_detections.csv",
-    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/out4_detections.csv",
-    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/out13_detections.csv",
+    "classic": BALL_TRACKING_CSVS_CLASSIC,
+    "wasb": BALL_TRACKING_CSVS_WASB,
 }
 IOU_THRESHOLD = 1e-5
 
@@ -107,11 +116,13 @@ def load_track(tracking_csvs: dict[str, Path]) -> dict[str, pd.DataFrame]:
     return track_df
 
 def xywh_to_xyxy(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     df["bbox"] = df["bbox"].apply(
         lambda box: [box[0], box[1], box[0] + box[2], box[1] + box[3]])
     return df
 
 def uvwh_to_xyxy(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     df["bbox"] = df["bbox"].apply(
         lambda box: [box[0] - box[2] / 2, box[1] - box[3] / 2,
                      box[0] + box[2] / 2, box[1] + box[3] / 2])
@@ -127,7 +138,7 @@ def compute_iou_mat(gt_boxes: list, res_boxes: list) -> torch.Tensor | None:
 def downsample_df(df: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     df_ds = {}
     for cam in df:
-        df_ds[cam] = df[cam][df[cam]["frame"] % STRIDE == 0]
+        df_ds[cam] = df[cam][df[cam]["frame"] % STRIDE == 0].copy()
         df_ds[cam]["frame_ds"] = (df_ds[cam]["frame"] / STRIDE).astype(int)
     return df_ds
 
@@ -168,42 +179,61 @@ def print_metrics(label: str, tp: int, fp: int, fn: int, iou_sum: float) -> None
     print(f"  MOTP      = {motp:.3f}  (mean IoU over matched pairs)")
 
 
-def main() -> None:
-    gt_df          = load_gt(JSON_GT)
+def evaluate_players() -> tuple[int, int, int, float]:
+    gt_df = load_gt(JSON_GT)
     player_track_df = downsample_df(load_track(PLAYER_TRACKING_CSVS))
-    ball_track_df   = downsample_df(load_track(BALL_TRACKING_CSVS))
 
     tp_p, fp_p, fn_p, iou_sum_p = 0, 0, 0, 0.0
+
+    for cam in gt_df:
+        eval_frames = sorted(set(gt_df[cam]["frame"]))
+        for frame in eval_frames:
+            gt_frame = xywh_to_xyxy(gt_df[cam][gt_df[cam]["frame"] == frame])
+            gt_players = gt_frame[gt_frame["class_id"] == 0]["bbox"].tolist()
+
+            player_res_frame = uvwh_to_xyxy(player_track_df[cam][player_track_df[cam]["frame_ds"] == frame])
+            res_players = player_res_frame["bbox"].tolist()
+
+            player_mat = compute_iou_mat(gt_players, res_players)
+            tp, fp, fn, iou = match_boxes(player_mat, len(gt_players), len(res_players), IOU_THRESHOLD)
+            tp_p += tp; fp_p += fp; fn_p += fn; iou_sum_p += iou
+
+    print("=== Players (YOLO) ===")
+    print_metrics("Players", tp_p, fp_p, fn_p, iou_sum_p)
+    return tp_p, fp_p, fn_p, iou_sum_p
+
+
+def evaluate_ball_tracker(label: str, tracking_csvs: dict[str, Path]) -> tuple[int, int, int, float]:
+    gt_df = load_gt(JSON_GT)
+    ball_track_df = downsample_df(load_track(tracking_csvs))
+
     tp_b, fp_b, fn_b, iou_sum_b = 0, 0, 0, 0.0
 
     for cam in gt_df:
         eval_frames = sorted(set(gt_df[cam]["frame"]))
-        print(f"Processing {cam}")
-
         for frame in eval_frames:
-            print(f"frame: {frame} in {len(eval_frames)}")
             gt_frame = xywh_to_xyxy(gt_df[cam][gt_df[cam]["frame"] == frame])
-            gt_players = gt_frame[gt_frame["class_id"] == 0]["bbox"].tolist()
-            gt_ball    = gt_frame[gt_frame["class_id"] == 1]["bbox"].tolist()
+            gt_ball = gt_frame[gt_frame["class_id"] == 1]["bbox"].tolist()
 
-            player_res_frame = uvwh_to_xyxy(player_track_df[cam][player_track_df[cam]["frame_ds"] == frame])
-            ball_res_frame   = uvwh_to_xyxy(ball_track_df[cam][ball_track_df[cam]["frame_ds"] == frame])
-            res_players = player_res_frame["bbox"].tolist()
-            res_ball    = ball_res_frame["bbox"].tolist()
+            ball_res_frame = uvwh_to_xyxy(ball_track_df[cam][ball_track_df[cam]["frame_ds"] == frame])
+            res_ball = ball_res_frame["bbox"].tolist()
 
-            player_mat = compute_iou_mat(gt_players, res_players)
-            ball_mat   = compute_iou_mat(gt_ball, res_ball)
-
-            tp, fp, fn, iou = match_boxes(player_mat, len(gt_players), len(res_players), IOU_THRESHOLD)
-            tp_p += tp; fp_p += fp; fn_p += fn; iou_sum_p += iou
-
+            ball_mat = compute_iou_mat(gt_ball, res_ball)
             tp, fp, fn, iou = match_boxes(ball_mat, len(gt_ball), len(res_ball), IOU_THRESHOLD)
             tp_b += tp; fp_b += fp; fn_b += fn; iou_sum_b += iou
 
-    print("\n\n\n\n")
-    print_metrics("Players", tp_p, fp_p, fn_p, iou_sum_p)
-    print()
-    print_metrics("Ball",    tp_b, fp_b, fn_b, iou_sum_b)
+    print(f"\n=== {label} ===")
+    print_metrics("Ball", tp_b, fp_b, fn_b, iou_sum_b)
+    return tp_b, fp_b, fn_b, iou_sum_b
+
+
+def main() -> None:
+    evaluate_players()
+    print("\n" + "-" * 80)
+    evaluate_ball_tracker("Ball: classic tracker", BALL_TRACKING_CSVS["classic"])
+    print("\n" + "-" * 80)
+    evaluate_ball_tracker("Ball: WASB tracker", BALL_TRACKING_CSVS["wasb"])
+
 
 if __name__ == "__main__":
     main()

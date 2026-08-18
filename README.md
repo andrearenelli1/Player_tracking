@@ -60,28 +60,25 @@ python3 src/tracking_players_2d.py
   ```bash
   python3 src/track_ball_classic.py
   ```
-  → `tracking_results/tracking_2d/ball_trajectories/2d_positions{0,1,2}.csv`,
+  → `tracking_results/tracking_2d/ball_trajectories/ball_tracking_classic_out{2,4,13}.csv`,
   same schema as step 1.
 - **WASB/HRNet** (pretrained deep model, better recall/precision,
   needs Docker + GPU — see the dedicated section below):
   ```bash
   sh WASB-SBDT/src/run_tracking.sh   # from inside the container
   ```
-  → `tracking_results/tracking_2d/ball_trajectories/out{2,4,13}_detections.csv`
+  → `tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out{2,4,13}.csv`
   + overlay videos in `tracking_results/tracking_2d/evaluation/`.
 
-  ⚠️ **`evaluate_2d.py`/`visualize_2d.py` currently read the classic
-  tracker's `2d_positions{0,1,2}.csv`, not WASB's `out*_detections.csv`**
-  — same schema, different filename, not wired together by default. If
-  you want to evaluate/visualize the WASB output instead, point those
-  scripts' `BALL_TRACKING_CSVS`/`BL_POS_CSVS` dicts at the
-  `out*_detections.csv` files (or rename them).
+  The evaluation and visualization scripts now intentionally use the
+  explicit classic/WASB file names above; there is no separate evaluation
+  script for WASB anymore.
 
-**3. 2D evaluation** (players + ball, IoU-matched against ground truth):
+**3. 2D evaluation** (players + classic-ball + WASB-ball, IoU-matched against ground truth):
 ```bash
 python3 src/evaluate_2d.py
 ```
-Prints precision/recall/F1/MOTP to stdout — **does not save a file**.
+Prints precision/recall/F1/MOTP to stdout in this fixed order: players (YOLO), ball with the classic tracker, then ball with WASB — **does not save a file**.
 
 **4. 3D tracking** (triangulates matched detections across cameras):
 ```bash
@@ -145,13 +142,15 @@ Verify the mount matches before trusting any output:
 All commands below run **inside the container**, from
 `/workspace/WASB-SBDT/src`.
 
-### Running it — the different cases
+### Running it — the supported cases
 
-**Case A — full pipeline: track all 3 videos + evaluate against ground truth**
+**Case A — full WASB tracking run for all 3 videos**
 ```bash
-sh run_tracking.sh   # -> tracking_results/tracking_2d/ball_trajectories/*.csv, .../evaluation/*_result.mp4
-sh run_eval.sh        # -> tracking_results/tracking_2d/evaluation/eval_results.csv
+sh run_tracking.sh
 ```
+This writes the per-camera WASB CSVs to
+`tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out{2,4,13}.csv`
+and the overlay videos in `tracking_results/tracking_2d/evaluation/`.
 
 **Case B — track a single video by hand**
 ```bash
@@ -160,29 +159,14 @@ python3 track_ball.py \
     --checkpoint /workspace/WASB-SBDT/pretrained_weights/wasb_basketball_best.pth.tar \
     --config /workspace/WASB-SBDT/src/configs/model/wasb.yaml \
     --cam-id cam_1 \
-    --csv-output /workspace/tracking_results/tracking_2d/ball_trajectories/out4_detections.csv \
+    --csv-output /workspace/tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out4.csv \
     --output /workspace/tracking_results/tracking_2d/evaluation/out4_result.mp4
 ```
 `out13` needs `--tile-n 3 --mask-rect 3700,500,3840,680` added (full-court
 shot, ball otherwise too small after the mandatory resize — see
 `claude_context.md`); `out2`/`out4` work with plain defaults.
 
-**Case C — evaluate only, against ground truth** (re-runs inference itself,
-does not read the CSVs from Case A/B):
-```bash
-python3 eval_wasb.py \
-    --annotations /workspace/annotations/_annotations.coco.json \
-    --videos-dir /workspace/videos \
-    --checkpoint /workspace/WASB-SBDT/pretrained_weights/wasb_basketball_best.pth.tar \
-    --config /workspace/WASB-SBDT/src/configs/model/wasb.yaml \
-    --tile-videos out13 --tile-n 3 --mask-rect out13:3700,500,3840,680 \
-    --output-csv /workspace/tracking_results/tracking_2d/evaluation/eval_results.csv
-```
-Add `--overlay-dir <path>` to also save per-frame TP/FN/FP2/FP1/TN images
-for visual inspection; `--exclude-videos out13` to score only the
-close-up views.
-
-**Case D — inspect confidence on a video without producing final output**
+**Case C — inspect confidence on a video without producing final output**
 (threshold calibration / quick sanity check):
 ```bash
 python3 track_ball.py \
@@ -193,14 +177,17 @@ python3 track_ball.py \
     --debug-dir /workspace/tracking_results/tracking_2d/evaluation/debug_out2
 ```
 
+After any tracker run, use the single evaluation entry point in the main repo:
+`python3 src/evaluate_2d.py`.
+
 ## Known issues (as of this writing)
 
 - **`tracking_3d.py`/`evaluate_3d.py`** expect
   `camera_calibration/camera_calibration.csv`, which no longer exists
   (see step 4/5 above) — steps 4-6 of the pipeline don't currently run.
-- **`ball_trajectories/` naming**: `evaluate_2d.py`/`visualize_2d.py`
-  read the classic tracker's `2d_positions{0,1,2}.csv` by default, not
-  WASB's `out*_detections.csv` (see step 2 above).
+- **`ball_trajectories/` naming**: the repo now uses explicit names to
+  distinguish the trackers: `ball_tracking_classic_out{2,4,13}.csv` and
+  `ball_tracking_wasb_out{2,4,13}.csv`.
 - **`3D Tracking Material/rectified_videos.py`** is course-provided
   reference material with hardcoded paths (`data/camera_data/...`) not
   adapted to this repo — not part of the working pipeline.

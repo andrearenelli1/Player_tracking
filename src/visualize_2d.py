@@ -1,9 +1,12 @@
+import json
 import cv2
 import pandas as pd
 from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).parent.parent
+CALIB_DIR = ROOT / "calibrated_parameters"
+
 PL_POS_CSVS = {
     "out2": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv",
     "out4": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions1.csv",
@@ -11,9 +14,9 @@ PL_POS_CSVS = {
 }
 
 BL_POS_CSVS = {
-    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions0.csv",
-    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions1.csv",
-    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions2.csv",
+    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out2.csv",
+    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out4.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out13.csv",
 }
 
 VIDEOS = {
@@ -21,8 +24,28 @@ VIDEOS = {
     "out4": ROOT / "videos/out4.mp4",
     "out13": ROOT / "videos/out13.mp4",
 }
+CALIB_FILES = {
+    "out2": CALIB_DIR / "cam_2.json",
+    "out4": CALIB_DIR / "cam_4.json",
+    "out13": CALIB_DIR / "cam_13.json",
+}
 BALL_CLASS_ID = 0
 TRAJ_LENGTH = 10
+
+
+def load_calibration(calib_path: Path):
+    with open(calib_path) as f:
+        calib = json.load(f)
+    mtx = np.array(calib["mtx"], dtype=np.float64)
+    dist = np.array(calib["dist"], dtype=np.float64).reshape(-1)
+    return mtx, dist
+
+
+def build_undistort_map(mtx: np.ndarray, dist: np.ndarray, width: int, height: int):
+    grid_x, grid_y = np.meshgrid(np.arange(width), np.arange(height))
+    pts = np.stack([grid_x, grid_y], axis=-1).astype(np.float32).reshape(-1, 1, 2)
+    undistorted = cv2.undistortPoints(pts, mtx, dist, P=mtx).reshape(height, width, 2)
+    return undistorted[:, :, 0], undistorted[:, :, 1]
 
 def compute_corners(u: float, v: float, w: float, h: float) -> dict[str, tuple[int, int]]:
     tl = (int(u - w / 2), int(v - h / 2))
@@ -37,25 +60,18 @@ def compute_corners(u: float, v: float, w: float, h: float) -> dict[str, tuple[i
     }
     return corners
 
-def draw_bb(frame: np.ndarray, frame_id: int, bb_df: pd.DataFrame) -> None:
+def draw_bb(frame: np.ndarray, frame_id: int, bb_df: pd.DataFrame, color: tuple[int, int, int], label: str) -> None:
     bb = bb_df[bb_df["frame"] == frame_id]
     line_thickness = 3
-    red = (0, 0, 255)
-    green = (0, 255, 0)
 
     for _, row in bb.iterrows():
-        if row["class_id"] == BALL_CLASS_ID:
-            line_color = red
-        else:
-            line_color = green
-            print("--------------------------ERROR: Class not found--------------------------")
         corners = compute_corners(row["u"], row["v"], row["w"], row["h"])
-        cv2.line(frame, corners["tl"], corners["bl"], line_color, line_thickness)
-        cv2.line(frame, corners["bl"], corners["br"], line_color, line_thickness)
-        cv2.line(frame, corners["br"], corners["tr"], line_color, line_thickness)
-        cv2.line(frame, corners["tr"], corners["tl"], line_color, line_thickness)
-        cv2.putText(frame, f"ID={row["object_id"]}", corners["tr"], cv2.FONT_HERSHEY_SIMPLEX, 1, line_color, 2)
-        draw_traj(bb_df, frame_id, row, line_color, frame)
+        cv2.line(frame, corners["tl"], corners["bl"], color, line_thickness)
+        cv2.line(frame, corners["bl"], corners["br"], color, line_thickness)
+        cv2.line(frame, corners["br"], corners["tr"], color, line_thickness)
+        cv2.line(frame, corners["tr"], corners["tl"], color, line_thickness)
+        cv2.putText(frame, f"{label} ID={row['object_id']}", corners["tr"], cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+        draw_traj(bb_df, frame_id, row, color, frame)
 
 def draw_traj(bb_df: pd.DataFrame, frame_id: int, row: pd.Series, color: tuple[int, int, int], frame: np.ndarray) -> None:
     filtered_df = bb_df[(bb_df["frame"] <= frame_id) &
@@ -67,13 +83,18 @@ def draw_traj(bb_df: pd.DataFrame, frame_id: int, row: pd.Series, color: tuple[i
     thickness = 4
     cv2.polylines(frame, points, True, color, thickness)
 
-def disp_video(CSV_FILE) -> None:
-    for (cam_id, vid), (csv_id, csv_file) in zip(VIDEOS.items(), CSV_FILE.items()):
+def disp_video(player_csvs: dict[str, Path], ball_csvs: dict[str, Path]) -> None:
+    for (cam_id, vid), (_, player_csv), (_, ball_csv) in zip(VIDEOS.items(), player_csvs.items(), ball_csvs.items()):
         cap = cv2.VideoCapture(vid)
-        bb_df = pd.read_csv(csv_file)
+        player_df = pd.read_csv(player_csv)
+        ball_df = pd.read_csv(ball_csv)
         if not cap.isOpened():
             print("Error: Could not open the video file.")
             exit()
+
+        calib_path = CALIB_FILES[cam_id]
+        mtx, dist = load_calibration(calib_path)
+        map_x, map_y = build_undistort_map(mtx, dist, 3840, 2160)
 
         frame_id = -1
         while True:
@@ -82,9 +103,11 @@ def disp_video(CSV_FILE) -> None:
             if not ret:
                 break
             frame_id += 1
-            draw_bb(frame, frame_id, bb_df)
-            frame = cv2.resize(frame, (960, 540))
-            cv2.imshow(cam_id, frame)
+            rectified = cv2.remap(frame, map_x, map_y, interpolation=cv2.INTER_LINEAR)
+            draw_bb(rectified, frame_id, player_df, (0, 255, 0), "PLAYER")
+            draw_bb(rectified, frame_id, ball_df, (0, 0, 255), "BALL")
+            rectified = cv2.resize(rectified, (960, 540))
+            cv2.imshow(cam_id, rectified)
 
             if cv2.waitKey(25) &0xFF == ord('q'):
                 break
@@ -93,8 +116,7 @@ def disp_video(CSV_FILE) -> None:
         cv2.destroyAllWindows()
 
 def main() -> None:
-    disp_video(PL_POS_CSVS)
-    disp_video(BL_POS_CSVS)
+    disp_video(PL_POS_CSVS, BL_POS_CSVS)
 
 if __name__ == "__main__":
     main()

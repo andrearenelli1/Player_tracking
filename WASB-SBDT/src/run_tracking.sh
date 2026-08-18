@@ -32,7 +32,7 @@ python3 track_ball.py \
   --checkpoint ${CHECKPOINT} \
   --config ${CONFIG} \
   --cam-id cam_0 \
-  --csv-output ${BALL_DIR}/out2_detections.csv \
+  --csv-output ${BALL_DIR}/ball_tracking_wasb_out2.csv \
   --output ${EVAL_DIR}/out2_result.mp4
 
 echo "=== out4 (cam_1) ==="
@@ -41,7 +41,7 @@ python3 track_ball.py \
   --checkpoint ${CHECKPOINT} \
   --config ${CONFIG} \
   --cam-id cam_1 \
-  --csv-output ${BALL_DIR}/out4_detections.csv \
+  --csv-output ${BALL_DIR}/ball_tracking_wasb_out4.csv \
   --output ${EVAL_DIR}/out4_result.mp4
 
 echo "=== out13 (cam_2, tiled 3x3 + mask on the corner-graphic confuser, see claude_context.md) ==="
@@ -52,7 +52,7 @@ python3 track_ball.py \
   --cam-id cam_2 \
   --tile-n 3 \
   --mask-rect 3700,500,3840,680 \
-  --csv-output ${BALL_DIR}/out13_detections.csv \
+  --csv-output ${BALL_DIR}/ball_tracking_wasb_out13.csv \
   --output ${EVAL_DIR}/out13_result.mp4
 
 echo "=== done: CSVs written to ${BALL_DIR}, overlay videos to ${EVAL_DIR} ==="

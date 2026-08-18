@@ -10,9 +10,9 @@ ROOT = Path(__file__).parent.parent
 # min/max area are in pixels^2 and are tuned per camera: cam_2 frames the court
 # from much further away, so the ball projects onto a much smaller blob there.
 CAMERAS = [
-    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions0.csv", 100, 8000),
-    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions1.csv", 100, 8000),
-    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions2.csv", 20, 1500),
+    ("cam_0", ROOT / "videos/out2.mp4",  ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_classic_out2.csv", 100, 8000),
+    ("cam_1", ROOT / "videos/out4.mp4",  ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_classic_out4.csv", 100, 8000),
+    ("cam_2", ROOT / "videos/out13.mp4", ROOT / "tracking_results/tracking_2d/ball_trajectories/ball_tracking_classic_out13.csv", 20, 1500),
 ]
 
 CSV_COLUMNS = ["frame", "cam_id", "class_id", "object_id", "u", "v", "w", "h"]
