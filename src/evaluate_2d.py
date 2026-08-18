@@ -23,9 +23,9 @@ PLAYER_TRACKING_CSVS = {
     "out13": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions2.csv",
 }
 BALL_TRACKING_CSVS = {
-    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions0.csv",
-    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions1.csv",
-    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/2d_positions2.csv",
+    "out2": ROOT / "tracking_results/tracking_2d/ball_trajectories/out2_detections.csv",
+    "out4": ROOT / "tracking_results/tracking_2d/ball_trajectories/out4_detections.csv",
+    "out13": ROOT / "tracking_results/tracking_2d/ball_trajectories/out13_detections.csv",
 }
 IOU_THRESHOLD = 1e-5
 
