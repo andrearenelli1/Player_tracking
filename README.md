@@ -85,19 +85,16 @@ Prints precision/recall/F1/MOTP to stdout in this fixed order: players (YOLO), b
 python3 src/tracking_3d.py
 ```
 → `tracking_results/tracking_3d/3d_positions.csv` + `global_id_map.csv`.
-⚠️ **Currently broken**: expects a calibration file at
-`camera_calibration/camera_calibration.csv`, which doesn't exist in this
-repo (stale path from before the calibration data moved to
-`calibrated_parameters/*.json` — see the layout section above). Needs
-adapting `load_cameras()`/`CALIB_CSV` in `tracking_3d.py` before this step
-runs.
+`load_cameras()` reads `calibrated_parameters/cam_{2,4,13}.json`
+(`mtx`/`dist`/`rvecs`/`tvecs`) and builds each camera's projection matrix
+from them; note `tvecs` are in millimeters and get converted to meters
+to match the court's coordinate system (see `COURT_HALF_LENGTH`/`WIDTH`).
 
 **5. 3D evaluation**:
 ```bash
 python3 src/evaluate_3d.py
 ```
-→ `tracking_results/tracking_3d/evaluation_3d.csv`. Same broken
-`CALIB_CSV` dependency as step 4.
+→ `tracking_results/tracking_3d/evaluation_3d.csv`.
 
 **6. Visualization**:
 ```bash
@@ -182,9 +179,6 @@ After any tracker run, use the single evaluation entry point in the main repo:
 
 ## Known issues (as of this writing)
 
-- **`tracking_3d.py`/`evaluate_3d.py`** expect
-  `camera_calibration/camera_calibration.csv`, which no longer exists
-  (see step 4/5 above) — steps 4-6 of the pipeline don't currently run.
 - **`ball_trajectories/` naming**: the repo now uses explicit names to
   distinguish the trackers: `ball_tracking_classic_out{2,4,13}.csv` and
   `ball_tracking_wasb_out{2,4,13}.csv`.

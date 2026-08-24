@@ -1,7 +1,7 @@
 import csv
 from collections import defaultdict
 from pathlib import Path
-
+import json
 import cv2
 import numpy as np
 import pandas as pd
@@ -9,7 +9,9 @@ from scipy.optimize import linear_sum_assignment
 
 ROOT = Path(__file__).parent.parent
 
-CALIB_CSV = ROOT / "camera_calibration/camera_calibration.csv"
+CALIB_DIR = ROOT / "calibrated_parameters"
+CALIB_FILES = {"out2": "cam_2.json", "out4": "cam_4.json", "out13": "cam_13.json"}
+
 
 TRAJ_2D = {
     "out2": ROOT / "tracking_results/tracking_2d/trajectories/2d_positions0.csv",
@@ -44,17 +46,16 @@ def in_bounds(X, Y, Z):
             and Z_MIN <= Z <= Z_MAX)
 
 
-def load_cameras(path):
-    """Reads camera_calibration.csv -> dict camera -> {K, dist, P}."""
+def load_cameras():
     cams = {}
-    with open(path, newline="") as f:
-        for row in csv.DictReader(f):
-            name = row["camera"]
-            K = np.array([[float(row[f"K{i}{j}"]) for j in range(3)] for i in range(3)])
-            P = np.array([[float(row[f"P{i}{j}"]) for j in range(4)] for i in range(3)])
-            dist = np.array([float(row["k1"]), float(row["k2"]),
-                              float(row["p1"]), float(row["p2"])])
-            cams[name] = {"K": K, "dist": dist, "P": P}
+    for cam_name, fname in CALIB_FILES.items():
+        d = json.loads((CALIB_DIR / fname).read_text())
+        K = np.array(d["mtx"])
+        dist = np.array(d["dist"]).reshape(-1)          # k1,k2,p1,p2,k3
+        R, _ = cv2.Rodrigues(np.array(d["rvecs"]).reshape(3, 1))
+        t = np.array(d["tvecs"]).reshape(3, 1) / 1000.0  # mm -> m
+        P = K @ np.hstack([R, t])
+        cams[cam_name] = {"K": K, "dist": dist, "P": P}
     return cams
 
 
@@ -210,7 +211,7 @@ def assign_global_ids(tracks, uf):
 
 
 def main():
-    cams = load_cameras(CALIB_CSV)
+    cams = load_cameras()
     tracks = load_2d_trajectories()
 
     for cam_name, df in tracks.items():

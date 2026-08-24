@@ -6,7 +6,7 @@ import pandas as pd
 from collections import defaultdict
 from pathlib import Path
 from scipy.optimize import linear_sum_assignment
-from tracking_3d import CALIB_CSV, OUT_CSV, load_cameras, triangulate_point, undistort_points
+from tracking_3d import OUT_CSV, load_cameras, triangulate_point, undistort_points
 
 
 ROOT = Path(__file__).parent.parent
@@ -92,7 +92,7 @@ def match_and_score(gt_3d, recon_3d):
 
 
 def main():
-    cams = load_cameras(CALIB_CSV)
+    cams = load_cameras()
 
     gt_df = load_gt_detections(cams)
     gt_3d = triangulate_gt(gt_df, cams)
