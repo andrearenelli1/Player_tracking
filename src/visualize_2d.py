@@ -42,10 +42,24 @@ def load_calibration(calib_path: Path):
 
 
 def build_undistort_map(mtx: np.ndarray, dist: np.ndarray, width: int, height: int):
-    grid_x, grid_y = np.meshgrid(np.arange(width), np.arange(height))
-    pts = np.stack([grid_x, grid_y], axis=-1).astype(np.float32).reshape(-1, 1, 2)
-    undistorted = cv2.undistortPoints(pts, mtx, dist, P=mtx).reshape(height, width, 2)
-    return undistorted[:, :, 0], undistorted[:, :, 1]
+    """Correct backward map for cv2.remap (cv2.initUndistortRectifyMap), unlike the
+    hand-built cv2.undistortPoints-based version used elsewhere in the course
+    material -- see report.tex for why that direction is wrong. player_df is already
+    rectified point-wise upstream (tracking_players_2d.py), so drawing it on top of
+    this correctly-rectified frame lines back up; ball_df (WASB, still raw/distorted)
+    is rectified point-wise below before drawing, same reasoning."""
+    return cv2.initUndistortRectifyMap(mtx, dist, None, mtx, (width, height), cv2.CV_32FC1)
+
+def rectify_center_bb(u: float, v: float, w: float, h: float,
+                       mtx: np.ndarray, dist: np.ndarray) -> tuple[float, float, float, float]:
+    x0, y0, x1, y1 = u - w / 2, v - h / 2, u + w / 2, v + h / 2
+    corners = np.array([[x0, y0], [x1, y0], [x0, y1], [x1, y1]],
+                        dtype=np.float32).reshape(-1, 1, 2)
+    undistorted = cv2.undistortPoints(corners, mtx, dist, P=mtx).reshape(-1, 2)
+    x_min, y_min = undistorted.min(axis=0)
+    x_max, y_max = undistorted.max(axis=0)
+    rw, rh = x_max - x_min, y_max - y_min
+    return x_min + rw / 2, y_min + rh / 2, rw, rh
 
 def compute_corners(u: float, v: float, w: float, h: float) -> dict[str, tuple[int, int]]:
     tl = (int(u - w / 2), int(v - h / 2))
@@ -95,6 +109,12 @@ def disp_video(player_csvs: dict[str, Path], ball_csvs: dict[str, Path]) -> None
         calib_path = CALIB_FILES[cam_id]
         mtx, dist = load_calibration(calib_path)
         map_x, map_y = build_undistort_map(mtx, dist, 3840, 2160)
+
+        # ball_df (WASB) is still in raw/distorted pixels, unlike player_df
+        # (already rectified point-wise upstream) -- rectify it here to match.
+        ball_df[["u", "v", "w", "h"]] = ball_df.apply(
+            lambda row: pd.Series(rectify_center_bb(row["u"], row["v"], row["w"], row["h"], mtx, dist)),
+            axis=1)
 
         frame_id = -1
         while True:

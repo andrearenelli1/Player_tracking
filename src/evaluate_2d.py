@@ -36,7 +36,19 @@ BALL_TRACKING_CSVS = {
     "classic": BALL_TRACKING_CSVS_CLASSIC,
     "wasb": BALL_TRACKING_CSVS_WASB,
 }
-IOU_THRESHOLD = 1e-5
+# Standard COCO/PASCAL/CLEAR-MOT matching threshold for players; relaxed for
+# the ball, which is small/fast and harder to localize precisely.
+IOU_THRESHOLD_PLAYERS = 0.5
+IOU_THRESHOLD_BALL = 0.3
+
+# PCK-style matching for the ball: a hit is "center within alpha * GT box
+# diagonal", instead of IoU. Ball trackers (WASB, and the classic baseline)
+# are point/heatmap detectors that draw a roughly fixed-size box around an
+# estimated center -- they are not trying to estimate the ball's true extent.
+# The GT box, on the other hand, really does span the ball's extent, and that
+# extent varies a lot by camera (close-up vs. full-court), which IoU
+# conflates with localization quality. See report.tex for the reasoning.
+PCK_ALPHA = 0.5
 
 
 def load_calibration(calib_path: Path):
@@ -101,12 +113,31 @@ def load_gt(json_gt: Path) -> dict[str, pd.DataFrame]:
         out[cam_name]["bbox"] = out[cam_name]["bbox"].apply(lambda box: rectify_bb(box, mtx, dist))
     return out
 
-def load_track(tracking_csvs: dict[str, Path]) -> dict[str, pd.DataFrame]:
+def rectify_center_bb(box: list, mtx: np.ndarray, dist: np.ndarray) -> list:
+    """[u, v, w, h] center-format box in raw/distorted pixels -> same-format box
+    after undistortion. Same corner-based approach as rectify_bb above, just
+    center-in/center-out (matches tracking_players_2d.py's rectify_center_box)."""
+    u, v, w, h = box
+    x, y = u - w / 2, v - h / 2
+    x_min, y_min, rw, rh = rectify_bb([x, y, w, h], mtx, dist)
+    return [x_min + rw / 2, y_min + rh / 2, rw, rh]
+
+
+def load_track(tracking_csvs: dict[str, Path], calib_files: dict[str, Path] | None = None) -> dict[str, pd.DataFrame]:
+    """Reads tracker output CSVs (frame, cam_id, class_id, object_id, u, v, w, h; u,v
+    is the box center). Pass `calib_files` only for trackers whose output is still in
+    raw/distorted pixels (e.g. the ball trackers) so it gets rectified here to match
+    the (already-rectified) GT and player detections -- player CSVs are rectified
+    upstream in tracking_players_2d.py, so they must be passed with calib_files=None
+    to avoid undistorting them twice."""
     track_df = {}
     for cam_name, csv_path in tracking_csvs.items():
         df = pd.read_csv(csv_path)
         df["bbox"] = df.apply(
             lambda row: [row["u"], row["v"], row["w"], row["h"]], axis=1)
+        if calib_files is not None:
+            mtx, dist = load_calibration(calib_files[cam_name])
+            df["bbox"] = df["bbox"].apply(lambda box: rectify_center_bb(box, mtx, dist))
         df = df.drop("u", axis=1)
         df = df.drop("v", axis=1)
         df = df.drop("w", axis=1)
@@ -166,6 +197,56 @@ def match_boxes(cost_mat: torch.Tensor | None, n_gt: int, n_res: int, threshold:
     return tp, fp, fn, iou_sum
 
 
+def compute_dist_mat(gt_boxes: list, res_boxes: list) -> np.ndarray | None:
+    """Pairwise Euclidean distance between box centers (xyxy in, both lists)."""
+    if len(gt_boxes) == 0 or len(res_boxes) == 0:
+        return None
+    gt_centers = np.array([[(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] for b in gt_boxes])
+    res_centers = np.array([[(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] for b in res_boxes])
+    return np.linalg.norm(gt_centers[:, None, :] - res_centers[None, :, :], axis=2)
+
+
+def match_points(dist_mat: np.ndarray | None, gt_boxes: list, n_gt: int, n_res: int,
+                  alpha: float) -> tuple[int, int, int, float]:
+    """Hungarian assignment minimizing center distance; a pair counts as TP if
+    distance <= alpha * (that GT box's own diagonal) -- PCK-style, so the
+    threshold adapts to how big the ball actually is in that camera/frame
+    instead of penalizing predicted-box shape/scale like IoU does."""
+    if dist_mat is None:
+        return 0, n_res, n_gt, 0.0
+
+    rows, cols = linear_sum_assignment(dist_mat)  # minimize total distance
+
+    tp, dist_sum = 0, 0.0
+    matched_gt, matched_res = set(), set()
+    for r, c in zip(rows, cols):
+        gx0, gy0, gx1, gy1 = gt_boxes[r]
+        diag = np.hypot(gx1 - gx0, gy1 - gy0)
+        d = dist_mat[r, c]
+        if d <= alpha * diag:
+            tp       += 1
+            dist_sum += d
+            matched_gt.add(r)
+            matched_res.add(c)
+
+    fp = n_res - len(matched_res)
+    fn = n_gt  - len(matched_gt)
+    return tp, fp, fn, dist_sum
+
+
+def print_metrics_dist(label: str, tp: int, fp: int, fn: int, dist_sum: float) -> None:
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1        = 2 * precision * recall / (precision + recall) \
+                                        if (precision + recall) > 0 else 0.0
+    mde       = dist_sum / tp if tp > 0 else 0.0
+    print(f"{label}:  TP={tp}  FP={fp}  FN={fn}")
+    print(f"  Precision = {precision:.3f}")
+    print(f"  Recall    = {recall:.3f}")
+    print(f"  F1        = {f1:.3f}")
+    print(f"  MDE       = {mde:.1f}px  (mean center distance over matched pairs, hit <= {PCK_ALPHA}*GT diagonal)")
+
+
 def print_metrics(label: str, tp: int, fp: int, fn: int, iou_sum: float) -> None:
     precision = tp / (tp + fp)              if (tp + fp) > 0           else 0.0
     recall    = tp / (tp + fn)              if (tp + fn) > 0           else 0.0
@@ -181,7 +262,7 @@ def print_metrics(label: str, tp: int, fp: int, fn: int, iou_sum: float) -> None
 
 def evaluate_players() -> tuple[int, int, int, float]:
     gt_df = load_gt(JSON_GT)
-    player_track_df = downsample_df(load_track(PLAYER_TRACKING_CSVS))
+    player_track_df = downsample_df(load_track(PLAYER_TRACKING_CSVS))  # already rectified upstream
 
     tp_p, fp_p, fn_p, iou_sum_p = 0, 0, 0, 0.0
 
@@ -195,7 +276,7 @@ def evaluate_players() -> tuple[int, int, int, float]:
             res_players = player_res_frame["bbox"].tolist()
 
             player_mat = compute_iou_mat(gt_players, res_players)
-            tp, fp, fn, iou = match_boxes(player_mat, len(gt_players), len(res_players), IOU_THRESHOLD)
+            tp, fp, fn, iou = match_boxes(player_mat, len(gt_players), len(res_players), IOU_THRESHOLD_PLAYERS)
             tp_p += tp; fp_p += fp; fn_p += fn; iou_sum_p += iou
 
     print("=== Players (YOLO) ===")
@@ -205,7 +286,7 @@ def evaluate_players() -> tuple[int, int, int, float]:
 
 def evaluate_ball_tracker(label: str, tracking_csvs: dict[str, Path]) -> tuple[int, int, int, float]:
     gt_df = load_gt(JSON_GT)
-    ball_track_df = downsample_df(load_track(tracking_csvs))
+    ball_track_df = downsample_df(load_track(tracking_csvs, calib_files=CALIB_FILES))  # raw distorted -> rectify here
 
     tp_b, fp_b, fn_b, iou_sum_b = 0, 0, 0, 0.0
 
@@ -219,12 +300,48 @@ def evaluate_ball_tracker(label: str, tracking_csvs: dict[str, Path]) -> tuple[i
             res_ball = ball_res_frame["bbox"].tolist()
 
             ball_mat = compute_iou_mat(gt_ball, res_ball)
-            tp, fp, fn, iou = match_boxes(ball_mat, len(gt_ball), len(res_ball), IOU_THRESHOLD)
+            tp, fp, fn, iou = match_boxes(ball_mat, len(gt_ball), len(res_ball), IOU_THRESHOLD_BALL)
             tp_b += tp; fp_b += fp; fn_b += fn; iou_sum_b += iou
 
     print(f"\n=== {label} ===")
     print_metrics("Ball", tp_b, fp_b, fn_b, iou_sum_b)
     return tp_b, fp_b, fn_b, iou_sum_b
+
+
+def evaluate_ball_tracker_dist(label: str, tracking_csvs: dict[str, Path],
+                                alpha: float = PCK_ALPHA) -> tuple[int, int, int, float]:
+    """Same matching as evaluate_ball_tracker, but PCK-style (center distance
+    normalized by GT box size) instead of IoU. Also breaks results down per
+    camera, since ball box scale (and WASB tuning) differs a lot camera to
+    camera -- an aggregate number alone hides that."""
+    gt_df = load_gt(JSON_GT)
+    ball_track_df = downsample_df(load_track(tracking_csvs, calib_files=CALIB_FILES))
+
+    tp_b, fp_b, fn_b, dist_sum_b = 0, 0, 0, 0.0
+    per_cam = {}
+
+    for cam in gt_df:
+        tp_c, fp_c, fn_c, dist_sum_c = 0, 0, 0, 0.0
+        eval_frames = sorted(set(gt_df[cam]["frame"]))
+        for frame in eval_frames:
+            gt_frame = xywh_to_xyxy(gt_df[cam][gt_df[cam]["frame"] == frame])
+            gt_ball = gt_frame[gt_frame["class_id"] == 1]["bbox"].tolist()
+
+            ball_res_frame = uvwh_to_xyxy(ball_track_df[cam][ball_track_df[cam]["frame_ds"] == frame])
+            res_ball = ball_res_frame["bbox"].tolist()
+
+            dist_mat = compute_dist_mat(gt_ball, res_ball)
+            tp, fp, fn, dist_sum = match_points(dist_mat, gt_ball, len(gt_ball), len(res_ball), alpha)
+            tp_c += tp; fp_c += fp; fn_c += fn; dist_sum_c += dist_sum
+
+        per_cam[cam] = (tp_c, fp_c, fn_c, dist_sum_c)
+        tp_b += tp_c; fp_b += fp_c; fn_b += fn_c; dist_sum_b += dist_sum_c
+
+    print(f"\n=== {label} (PCK-style, center dist <= {alpha}*GT diagonal) ===")
+    for cam, (tp_c, fp_c, fn_c, dist_sum_c) in per_cam.items():
+        print_metrics_dist(f"  [{cam}]", tp_c, fp_c, fn_c, dist_sum_c)
+    print_metrics_dist("  [all cameras]", tp_b, fp_b, fn_b, dist_sum_b)
+    return tp_b, fp_b, fn_b, dist_sum_b
 
 
 def main() -> None:
@@ -233,6 +350,10 @@ def main() -> None:
     evaluate_ball_tracker("Ball: classic tracker", BALL_TRACKING_CSVS["classic"])
     print("\n" + "-" * 80)
     evaluate_ball_tracker("Ball: WASB tracker", BALL_TRACKING_CSVS["wasb"])
+    print("\n" + "-" * 80)
+    evaluate_ball_tracker_dist("Ball: classic tracker", BALL_TRACKING_CSVS["classic"])
+    print("\n" + "-" * 80)
+    evaluate_ball_tracker_dist("Ball: WASB tracker", BALL_TRACKING_CSVS["wasb"])
 
 
 if __name__ == "__main__":

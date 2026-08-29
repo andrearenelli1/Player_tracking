@@ -212,12 +212,10 @@ def assign_global_ids(tracks, uf):
 
 def main():
     cams = load_cameras()
+    # tracking_players_2d.py already rectifies each detection's center point
+    # (undistorts the box corners and re-centers), so the loaded (u, v) here
+    # are already in undistorted pixel space -- do NOT undistort again.
     tracks = load_2d_trajectories()
-
-    for cam_name, df in tracks.items():
-        pts = df[["u", "v"]].to_numpy(dtype=float)
-        und = undistort_points(pts, cams[cam_name]["K"], cams[cam_name]["dist"])
-        df["u"], df["v"] = und[:, 0], und[:, 1]
 
     votes = vote_pairwise_matches(tracks, cams)
     uf = resolve_matches(votes)

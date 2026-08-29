@@ -14,8 +14,6 @@ MODEL_PATH = "yolo26n.pt"
 DISPLAY    = False
 INFER_W    = 1920
 INFER_H    = 1088
-VIDEO_W    = 3840
-VIDEO_H    = 2160
 TRAIL_LEN  = 30
 CONF       = 0.1
 CLASSES    = [0, 32]
@@ -38,21 +36,28 @@ def load_calibration(calib_path: Path):
     return mtx, dist
 
 
-def build_undistort_map(mtx: np.ndarray, dist: np.ndarray, width: int, height: int):
+def rectify_center_box(x: float, y: float, w: float, h: float,
+                        mtx: np.ndarray, dist: np.ndarray) -> tuple[float, float, float, float]:
+    """(x, y, w, h) center-format box in raw/distorted full-resolution pixels ->
+    same-format box after undistortion.
+
+    Undistorts the 4 corners (not just the center: undistortion is non-linear,
+    so the box shape itself changes) and returns the center-format AABB of the
+    undistorted corners. Mirrors evaluate_2d.py's rectify_bb (which does the
+    same for the GT boxes, in top-left format).
     """
-    Precomputes the pixel remap for rectification, same method as the given script 
-    rectified_videos.py: undistort a full-frame pixelgrid once (cv2.undistortPoints with P=mtx) and reuse it for every frame.
-    """
-    grid_x, grid_y = np.meshgrid(np.arange(width), np.arange(height))
-    pts = np.stack([grid_x, grid_y], axis=-1).astype(np.float32).reshape(-1, 1, 2)
-    undistorted = cv2.undistortPoints(pts, mtx, dist, P=mtx).reshape(height, width, 2)
-    map_x = undistorted[:, :, 0]
-    map_y = undistorted[:, :, 1]
-    return map_x, map_y
+    x0, y0, x1, y1 = x - w / 2, y - h / 2, x + w / 2, y + h / 2
+    corners = np.array([[x0, y0], [x1, y0], [x0, y1], [x1, y1]],
+                        dtype=np.float32).reshape(-1, 1, 2)
+    undistorted = cv2.undistortPoints(corners, mtx, dist, P=mtx).reshape(-1, 2)
+    x_min, y_min = undistorted.min(axis=0)
+    x_max, y_max = undistorted.max(axis=0)
+    rw, rh = x_max - x_min, y_max - y_min
+    return x_min + rw / 2, y_min + rh / 2, rw, rh
 
 
 def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path,
-                 map_x: np.ndarray, map_y: np.ndarray) -> None:
+                 mtx: np.ndarray, dist: np.ndarray) -> None:
     cap = cv2.VideoCapture(str(video_path))
     total   = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     scale_x = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  / INFER_W
@@ -65,25 +70,33 @@ def track_video(model: YOLO, cam_id: str, video_path: Path, csv_path: Path,
         success, frame = cap.read()
         if not success:
             break
-        frame = cv2.remap(frame, map_x, map_y, interpolation=cv2.INTER_LINEAR)
 
         print(f"  {cam_id}  frame {frame_idx + 1} / {total}")
 
+        # Detection runs on the raw (still distorted) frame, just resized for
+        # inference; undistortion is applied to the resulting box below,
+        # point-wise, instead of pre-warping the whole frame with a manually
+        # built remap (see report.tex / README for why: that construction -
+        # also used in the course-provided rectified_videos.py - builds the
+        # map with cv2.undistortPoints in the wrong direction for cv2.remap,
+        # producing up to ~300px of spurious displacement near the frame
+        # edges on this calibration).
         small  = cv2.resize(frame, (INFER_W, INFER_H))
         result = model.track(small, persist=True, verbose=False,
                              imgsz=(INFER_H, INFER_W), conf=CONF, classes=CLASSES)[0]
 
         if result.boxes and result.boxes.is_track:
-            boxes     = result.boxes.xywh.cpu().int()
+            boxes     = result.boxes.xywh.cpu().tolist()
             track_ids = result.boxes.id.int().cpu().tolist()
             classes   = result.boxes.cls.int().cpu().tolist()
 
             for box, track_id, cls in zip(boxes, track_ids, classes):
                 x, y, w, h = box
-                sw, sh = w.item() * scale_x, h.item() * scale_y
-                rows.append([frame_idx, cam_id, cls, track_id,
-                              x.item() * scale_x, y.item() * scale_y,
-                              sw, sh])
+                # back-project from inference resolution to raw full-res (still distorted) pixels
+                rx, ry = x * scale_x, y * scale_y
+                rw, rh = w * scale_x, h * scale_y
+                ux, uy, uw, uh = rectify_center_box(rx, ry, rw, rh, mtx, dist)
+                rows.append([frame_idx, cam_id, cls, track_id, ux, uy, uw, uh])
 
                 if DISPLAY:
                     trail[track_id].append((float(x), float(y)))
@@ -110,9 +123,7 @@ def main() -> None:
     model = YOLO(MODEL_PATH).to('cuda')
     for cam_id, video_path, csv_path, calib_path in CAMERAS:
         mtx, dist = load_calibration(calib_path)
-        map_x, map_y = build_undistort_map(mtx, dist, VIDEO_W, VIDEO_H)
-
-        track_video(model, cam_id, video_path, csv_path, map_x, map_y)
+        track_video(model, cam_id, video_path, csv_path, mtx, dist)
 
 
 if __name__ == '__main__':

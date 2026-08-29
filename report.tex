@@ -21,6 +21,8 @@
 \setlength{\intextsep}{6pt plus 2pt minus 2pt}
 \setlength{\abovecaptionskip}{4pt}
 \setlength{\belowcaptionskip}{2pt}
+\renewcommand{\baselinestretch}{0.95}
+\setlength{\emergencystretch}{3em}
 
 \newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
 
@@ -40,53 +42,13 @@
 \maketitle
 
 \begin{abstract}
-We present a multi-camera pipeline for tracking players, referees and the
-ball during a basketball action recorded at the Sanbapolis facility, and
-for reconstructing their 3D trajectories via triangulation. Ground truth
-is annotated at 5\,fps on three synchronized views ($2846$ boxes, $309$
-frames, $16$ categories). Players/referees are tracked per camera at the
-native 25\,fps with a YOLO detector and its built-in tracker, reaching
-Precision~$=0.775$, Recall~$=0.712$ (F1~$=0.742$), MOTP~$=0.423$ across
-all three views. The ball is far harder: a classical motion/colour
-baseline and a zero-shot pretrained small-ball detector (WASB/HRNet, with
-tiling on the widest-shot camera) reach F1~$=0.068$ and F1~$=0.143$
-respectively -- the latter roughly double, but both still limited by the
-ball's small size (a first fine-tuned-detector attempt failed for the same
-structural reason and was abandoned). Camera intrinsics/extrinsics were
-provided for this project; 2D tracks are re-identified across views by a
-reprojection-error voting scheme and triangulated into a court-centered
-frame. Against pseudo-ground truth from triangulated annotations, the
-reconstruction reaches a median error of $0.72$\,m (RMSE $1.01$\,m) over
-$44.9\%$ of candidate points, and the 18 resulting 3D tracks keep a valid
-position in $88.1\%$ of the frames within their own span on average.
+We present a multi-view pipeline for tracking basketball players and the ball and for reconstructing their 3D trajectories, using three fixed, calibrated cameras installed at the Sanbapolis facility in Trento. Ground-truth bounding boxes for players, referees, and the ball were manually annotated at 5 fps and used to evaluate the system. Players are detected and tracked at the native 25 fps with a YOLO-based tracker, while ball detection is addressed with two alternative approaches, a classical background-subtraction baseline and a pretrained deep model (WASB/HRNet), reflecting the difficulty of localizing a small, fast-moving object in wide-angle court footage. Camera calibration is used to undistort detections point-wise, and 3D player positions are recovered by triangulating matched detections across camera views, with a reprojection-consistency check and a court-plausibility filter to reject spurious cross-camera associations; this point-wise undistortion also corrects a subtle image-rectification bug -- present even in the course-provided reference script -- that we identified and fixed during development. On the annotated frames, player tracking reaches a precision of 0.70, a recall of 0.72, and an F1 score of 0.71 (mean IoU of 0.68 on matched boxes). Ball tracking proves substantially harder: under a standard IoU-based criterion both trackers essentially fail, but this conflates localization quality with box-scale mismatch, since both trackers estimate a center point rather than the ball's true extent, which itself varies sharply across cameras; under a scale-normalized, center-distance criterion the deep-learning-based tracker (F1 = 0.08) outperforms the classical baseline (F1 = 0.04) as expected, though recall remains the fundamental bottleneck. The resulting 3D reconstruction of player trajectories achieves a mean position error of 0.32 m (RMSE 0.53 m) with respect to the triangulated ground truth, over 51.6\% frame coverage. These results show that reliable player tracking and 3D localization are achievable with this camera setup, while robust ball detection remains the main open challenge.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 
-This work addresses the Player Tracking project of the Computer Vision
-course: given a multi-camera setup at the Sanbapolis facility, detect and
-track players, referees and the ball in each view, and reconstruct their
-3D trajectories by triangulation. One action was recorded from three
-fixed, synchronized cameras (\texttt{out2}, \texttt{out4}, \texttt{out13})
-on a FIBA-regulation $28\times15$\,m court. As a team of two, the
-mandatory scope is annotation (task~1), 2D tracking with evaluation
-(task~2/2a), and 3D triangulation with evaluation (task~3/3a) using at
-least two views; we use all three throughout.
 
-Two aspects make this work not straight-forward. The ball is
-small and fast, frequently occluded or blurred, and measures well under
-$20$\,px after the mandatory resize to a detector's input resolution --
-comparable to a CNN backbone's stride. And cross-camera association
-cannot reuse a per-camera ID: correspondence has to come from projective
-geometry, since no appearance-based re-identification was used (future
-work, Sec.~\ref{sec:conclusion}).
-
-This report covers the dataset, the camera model, the 2D
-detection/tracking pipeline (players and ball), and cross-camera 3D
-triangulation, each evaluated quantitatively -- including a
-trajectory-level continuity measure -- against the annotated ground
-truth (Sec.~\ref{sec:results}).
 
 \section{Method}
 \label{sec:method}
@@ -94,77 +56,21 @@ truth (Sec.~\ref{sec:results}).
 \subsection{Dataset and Annotation}
 \label{sec:dataset}
 
-One action was annotated from the three views on Roboflow at 5\,fps:
-$309$ frames ($99$/$105$/$105$ for \texttt{out2}/\texttt{out4}/
-\texttt{out13}) and $2846$ boxes over $16$ categories -- a generic
-\texttt{person} catch-all, \texttt{Ball} ($191$ boxes), six jersey-numbered
-``Red'' identities and six ``White'' (two of the twelve,
-\texttt{Red\_13}/\texttt{White\_11}, appear in only $1$/$5$ frames and are
-edge cases rather than consistently tracked identities), and two referees.
-Per-identity annotation lets the 3D pseudo-ground-truth
-(Sec.~\ref{sec:3d_results}) match a specific person across cameras without
-a separate re-identification step; for the 2D evaluation
-(Sec.~\ref{sec:2d_results}) every non-ball category is pooled into one
-\texttt{player} class.
+
 
 \subsection{Camera Model}
 \label{sec:calibration}
 
-Per-camera intrinsics ($K$, distortion) and extrinsics (rotation/
-translation w.r.t.\ a court-centered frame) were provided for this
-project rather than self-calibrated. They undistort every frame before 2D
-detection (Sec.~\ref{sec:2d_tracking}) and build each camera's projection
-matrix $P=K[R\,|\,t]$ for triangulation (Sec.~\ref{sec:3d_tracking}); we
-do not report a separate reprojection-error figure for the calibration
-itself, since it was not computed by us -- the full undistortion+
-triangulation chain is instead validated end-to-end in
-Sec.~\ref{sec:3d_results}.
+
 
 \subsection{2D Detection and Tracking}
 \label{sec:2d_tracking}
 
-\paragraph{Players and referees.} Each camera is processed independently
-at the native $25$\,fps: frames are undistorted (a per-pixel remap built
-once, reused every frame), resized to $1920\times1088$, and passed to a
-YOLO detector (COCO \texttt{person}/\texttt{sports ball}
-classes~\cite{Jocher2023}) run through Ultralytics' tracking mode
-(\texttt{persist=True}), which defaults to BoT-SORT~\cite{Aharon2022} when
-no alternative tracker is configured, as here. A low confidence threshold
-($0.1$) favors recall, relying on the tracker's temporal persistence to
-filter spurious detections.
 
-\paragraph{Ball.} The same pipeline is largely blind to the ball: at
-$1920\times1088$ it covers a handful of pixels, below what the backbone
-preserves after downsampling. A first attempt fine-tuned YOLO on ball-only
-crops with SAHI tiled inference~\cite{Akyon2022}; this did not fix recall,
-which is structural (the ball shrinks to single-digit pixel counts even
-per tile) rather than a training issue. Two alternatives were evaluated
-instead: (a) a classical baseline (MOG2 background subtraction with
-shadow removal, morphological cleanup, a circularity/aspect-ratio shape
-filter and an HSV colour-pattern filter, per-camera area thresholds); and
-(b) WASB/HRNet~\cite{Tarashima2023}, a pretrained heatmap-based detector
-with a basketball-specific checkpoint, used zero-shot with a confidence
-threshold recalibrated empirically (well below the broadcast-tuned
-default). On the widest-shot camera (\texttt{out13}, ball $\approx\!7$\,px
-after resize) WASB is additionally run with $3\times3$ overlapping tiling.
 
 \subsection{Cross-Camera Association and 3D Triangulation}
 \label{sec:3d_tracking}
 
-Per-camera tracks are undistorted using the calibration from
-Sec.~\ref{sec:calibration}. For every camera pair and frame, candidate
-matches between per-camera track IDs are scored by triangulating each
-detection pair and measuring the combined reprojection error in both
-views~\cite{Hartley2004}; a Hungarian assignment selects the best pairing
-per frame (reprojection error $<30$\,px). A track-level global identity
-forms only from pairs that are \emph{mutually} the best match and win the
-per-frame assignment in $\geq5$ distinct frames; consistent pairs merge
-into cross-camera groups via union-find, one global ID per group.
-
-For every frame, detections sharing a global ID from $\geq2$ cameras are
-triangulated with a multi-view DLT solve. A court-sized plausibility box
-($28\times15$\,m $+5$\,m margin, height $[-1,3]$\,m) discards points
-outside it, removing residual wrong matches rather than genuine players.
 
 \section{Results}
 \label{sec:results}
@@ -172,130 +78,28 @@ outside it, removing residual wrong matches rather than genuine players.
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-The 2D evaluation matches predicted/ground-truth boxes per frame (per
-camera, per class) with a Hungarian assignment on IoU, reporting
-Precision, Recall, F1 and MOTP (mean IoU over matched pairs), following
-CLEAR MOT~\cite{Bernardin2008}. The acceptance threshold is deliberately
-low (any non-zero overlap counts as a candidate match), so
-Precision/Recall/F1 mainly reflect whether an object was found in roughly
-the right place, while MOTP carries the localization-quality signal. The
-3D evaluation triangulates annotated boxes ($\geq2$ views, same frame,
-same category) into a pseudo-ground-truth 3D point, matched to the
-reconstruction with a Hungarian assignment on 3D distance (threshold
-$3$\,m).
+
 
 \subsection{2D Tracking}
 \label{sec:2d_results}
 
-Table~\ref{tab:2d_players} reports player/referee accuracy per camera and
-the ball trackers pooled over all three (per-camera ball numbers follow
-the same \texttt{out13}-is-hardest pattern). \texttt{out2}/\texttt{out4}
-(closer, narrower shots) track players considerably better than
-\texttt{out13} (wide, more/smaller/more-occluded people); pooled,
-Recall~$=0.712$, Precision~$=0.775$, MOTP~$=0.423$. For the ball, WASB
-roughly doubles F1 over the classical baseline with fewer false
-positives, but both miss most instances -- even WASB finds fewer than 1
-in 6 -- consistent with the small-object argument above.
 
-\begin{table}[t]
-\centering\small
-\caption{2D tracking accuracy: players+referees pooled (class\_id 0) per
-camera and aggregated; ball trackers (class\_id 1) pooled over all three
-cameras.}
-\label{tab:2d_players}
-\begin{tabular}{llccccc}
-\toprule
-& & TP & FP & FN & Precision / Recall / F1 & MOTP \\
-\midrule
-\multirow{4}{*}{Players}
-& \texttt{out2}  & 583  & 44  & 179 & 0.930 / 0.765 / 0.839 & 0.441 \\
-& \texttt{out4}  & 459  & 98  & 172 & 0.824 / 0.727 / 0.773 & 0.470 \\
-& \texttt{out13} & 848  & 408 & 414 & 0.675 / 0.672 / 0.674 & 0.386 \\
-& \textbf{All}   & 1890 & 550 & 765 & \textbf{0.775 / 0.712 / 0.742} & \textbf{0.423} \\
-\midrule
-\multirow{2}{*}{Ball}
-& Classic (MOG2+HSV) & 16 & 263 & 175 & 0.057 / 0.084 / 0.068 & 0.116 \\
-& WASB/HRNet         & 25 & 133 & 166 & 0.158 / 0.131 / 0.143 & 0.083 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 \subsection{3D Reconstruction}
 \label{sec:3d_results}
 
-Of $1085$ pseudo-ground-truth 3D points, $487$ ($44.9\%$ coverage) match a
-reconstructed point within $3$\,m, with an overall MED of $0.722$\,m and
-RMSE of $1.013$\,m. Per-identity (Table~\ref{tab:3d_breakdown}), most
-players/referees localize with sub-meter accuracy, with two exceptions:
-the ball (only $3$ matches, limited by the same detection scarcity as
-Sec.~\ref{sec:2d_results}) and \texttt{Red\_23} ($1.91$\,m over $75$
-matches -- not a handful of outliers, pointing to a systematic
-cross-camera association problem for that identity).
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.42\linewidth]{3d_positions.png}
-\caption{Reconstructed 3D trajectories, court-centered frame; each colour
-is one global cross-camera identity (Sec.~\ref{sec:3d_tracking}).}
-\label{fig:traj3d}
-\end{figure}
-
-\begin{table}[h]
-\centering\small
-\caption{3D error by identity, sorted by mean error (two columns for
-space).}
-\label{tab:3d_breakdown}
-\begin{tabular}{lcc@{\hspace{1.2cm}}lcc}
-\toprule
-Identity & Mean [m] & $n$ & Identity & Mean [m] & $n$ \\
-\midrule
-\texttt{Red\_2}    & 0.307 & 29 & \texttt{White\_14} & 0.592 & 26 \\
-\texttt{Refree\_1} & 0.308 & 49 & \texttt{White\_2}   & 0.614 & 32 \\
-\texttt{Red\_9}    & 0.381 & 14 & \texttt{Red\_7}     & 0.668 & 11 \\
-\texttt{White\_27} & 0.460 & 45 & \texttt{White\_34}  & 0.678 & 71 \\
-\texttt{White\_16} & 0.476 & 82 & \texttt{Ball}       & 1.431 & 3  \\
-\texttt{Red\_11}   & 0.496 & 50 & \texttt{Red\_23}    & 1.907 & 75 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 \subsection{Trajectory Continuity}
 \label{sec:traj_continuity}
 
-Point accuracy says nothing about identity continuity over time, which
-task~3a asks for explicitly. For each of the $18$ global 3D tracks,
-\emph{continuity} is the fraction of frames within its own
-first-to-last-frame span with a reconstructed position ($1.0$ = no
-gaps): $88.1\%$ on average (median span $155$ frames $=6.2$\,s; mean
-$3.4$ gaps/track). More tellingly, $18$ IDs exceeds the $\sim\!12$--$14$
-people on court (10 players + 2 referees): vote-based re-identification
-(Sec.~\ref{sec:3d_tracking}) sometimes fragments one person into several
-global tracks once cross-camera correspondence is lost, and never
-re-merges them -- a limitation of an association scheme with no
-appearance model.
 
 \section{Conclusions and Future Work}
 \label{sec:conclusion}
 
-We built and evaluated a three-camera pipeline for player/referee and
-ball tracking with 3D reconstruction, covering the mandatory tasks for a
-two-person team using all three views rather than the two required.
-Players/referees reach moderate-to-good 2D accuracy (pooled F1~$=0.742$)
-and sub-meter 3D median error ($0.72$\,m), validating the pipeline for
-the common case; the ball and \texttt{Red\_23} are the two clear
-outliers. The ball proved hard throughout: a fine-tuned-detector-plus-
-tiling attempt was abandoned once diagnosed as structurally limited by
-object size, and even the better pretrained model (WASB) stays well
-short of usable.
 
-Future work: diagnose the \texttt{Red\_23} outlier (likely a recurring
-wrong cross-camera pairing); add appearance-based re-identification
-against the fragmentation of Sec.~\ref{sec:traj_continuity}; revisit ball
-detection at its true pixel scale; adopt identity-aware MOT metrics
-(MOTA, ID switches); and, as a bonus, import the motion into Unreal
-Engine (task~4).
-
-\small
+\footnotesize
+\setlength{\itemsep}{0pt}
+\setlength{\parskip}{0pt}
 \begin{thebibliography}{9}
 
 \bibitem{Hartley2004}
