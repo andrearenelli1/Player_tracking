@@ -265,8 +265,10 @@ def evaluate_players() -> tuple[int, int, int, float]:
     player_track_df = downsample_df(load_track(PLAYER_TRACKING_CSVS))  # already rectified upstream
 
     tp_p, fp_p, fn_p, iou_sum_p = 0, 0, 0, 0.0
+    per_cam = {}
 
     for cam in gt_df:
+        tp_c, fp_c, fn_c, iou_sum_c = 0, 0, 0, 0.0
         eval_frames = sorted(set(gt_df[cam]["frame"]))
         for frame in eval_frames:
             gt_frame = xywh_to_xyxy(gt_df[cam][gt_df[cam]["frame"] == frame])
@@ -277,10 +279,15 @@ def evaluate_players() -> tuple[int, int, int, float]:
 
             player_mat = compute_iou_mat(gt_players, res_players)
             tp, fp, fn, iou = match_boxes(player_mat, len(gt_players), len(res_players), IOU_THRESHOLD_PLAYERS)
-            tp_p += tp; fp_p += fp; fn_p += fn; iou_sum_p += iou
+            tp_c += tp; fp_c += fp; fn_c += fn; iou_sum_c += iou
+
+        per_cam[cam] = (tp_c, fp_c, fn_c, iou_sum_c)
+        tp_p += tp_c; fp_p += fp_c; fn_p += fn_c; iou_sum_p += iou_sum_c
 
     print("=== Players (YOLO) ===")
-    print_metrics("Players", tp_p, fp_p, fn_p, iou_sum_p)
+    for cam, (tp_c, fp_c, fn_c, iou_sum_c) in per_cam.items():
+        print_metrics(f"  [{cam}]", tp_c, fp_c, fn_c, iou_sum_c)
+    print_metrics("  [all cameras]", tp_p, fp_p, fn_p, iou_sum_p)
     return tp_p, fp_p, fn_p, iou_sum_p
 
 
@@ -289,8 +296,10 @@ def evaluate_ball_tracker(label: str, tracking_csvs: dict[str, Path]) -> tuple[i
     ball_track_df = downsample_df(load_track(tracking_csvs, calib_files=CALIB_FILES))  # raw distorted -> rectify here
 
     tp_b, fp_b, fn_b, iou_sum_b = 0, 0, 0, 0.0
+    per_cam = {}
 
     for cam in gt_df:
+        tp_c, fp_c, fn_c, iou_sum_c = 0, 0, 0, 0.0
         eval_frames = sorted(set(gt_df[cam]["frame"]))
         for frame in eval_frames:
             gt_frame = xywh_to_xyxy(gt_df[cam][gt_df[cam]["frame"] == frame])
@@ -301,10 +310,15 @@ def evaluate_ball_tracker(label: str, tracking_csvs: dict[str, Path]) -> tuple[i
 
             ball_mat = compute_iou_mat(gt_ball, res_ball)
             tp, fp, fn, iou = match_boxes(ball_mat, len(gt_ball), len(res_ball), IOU_THRESHOLD_BALL)
-            tp_b += tp; fp_b += fp; fn_b += fn; iou_sum_b += iou
+            tp_c += tp; fp_c += fp; fn_c += fn; iou_sum_c += iou
+
+        per_cam[cam] = (tp_c, fp_c, fn_c, iou_sum_c)
+        tp_b += tp_c; fp_b += fp_c; fn_b += fn_c; iou_sum_b += iou_sum_c
 
     print(f"\n=== {label} ===")
-    print_metrics("Ball", tp_b, fp_b, fn_b, iou_sum_b)
+    for cam, (tp_c, fp_c, fn_c, iou_sum_c) in per_cam.items():
+        print_metrics(f"  [{cam}]", tp_c, fp_c, fn_c, iou_sum_c)
+    print_metrics("  [all cameras]", tp_b, fp_b, fn_b, iou_sum_b)
     return tp_b, fp_b, fn_b, iou_sum_b
 
 

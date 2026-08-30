@@ -91,6 +91,30 @@ def match_and_score(gt_3d, recon_3d):
     return pd.DataFrame(matches, columns=["frame", "category", "object_id", "error_m"])
 
 
+NATIVE_FPS = 25
+
+
+def evaluate_trajectory_continuity(recon_3d: pd.DataFrame) -> pd.DataFrame:
+    """Per global 3D track: does it stay alive over its own frame span, or
+    does it fragment? continuity = (frames actually present) / (span from
+    first to last frame); gaps = number of separate missing-frame runs
+    within that span. Point accuracy (MED/RMSE above) says nothing about
+    this -- task 3a asks for it explicitly as a trajectory-level metric."""
+    rows = []
+    for gid, sub in recon_3d.groupby("object_id"):
+        frames = sorted(sub["frame"].unique())
+        first, last = frames[0], frames[-1]
+        span = last - first + 1
+        present = len(frames)
+        gaps, prev = 0, frames[0]
+        for f in frames[1:]:
+            if f != prev + 1:
+                gaps += 1
+            prev = f
+        rows.append((gid, first, last, span, present, present / span, gaps))
+    return pd.DataFrame(rows, columns=["global_id", "first", "last", "span", "present", "continuity", "gaps"])
+
+
 def main():
     cams = load_cameras()
 
@@ -118,6 +142,14 @@ def main():
     EVAL_OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     matches.to_csv(EVAL_OUT_CSV, index=False)
     print(f"\nMatch details written to {EVAL_OUT_CSV}")
+
+    cont = evaluate_trajectory_continuity(recon_3d)
+    print(f"\nGlobal 3D tracks: {len(cont)}")
+    print(f"Mean continuity: {cont['continuity'].mean():.3f}")
+    print(f"Median span: {cont['span'].median():.0f} frames "
+          f"({cont['span'].median() / NATIVE_FPS:.1f}s)")
+    print(f"Mean gaps/track: {cont['gaps'].mean():.2f}")
+    print(cont.sort_values('span', ascending=False).to_string(index=False))
 
 
 if __name__ == "__main__":

@@ -177,17 +177,6 @@ python3 track_ball.py \
 After any tracker run, use the single evaluation entry point in the main repo:
 `python3 src/evaluate_2d.py`.
 
-## Known issues (as of this writing)
-
-- **`ball_trajectories/` naming**: the repo now uses explicit names to
-  distinguish the trackers: `ball_tracking_classic_out{2,4,13}.csv` and
-  `ball_tracking_wasb_out{2,4,13}.csv`.
-- **`3D Tracking Material/rectified_videos.py`** is course-provided
-  reference material with hardcoded paths (`data/camera_data/...`) not
-  adapted to this repo — not part of the working pipeline.
-  `track_ball_classic.py`/`tracking_players_2d.py` already do their own
-  undistortion inline using `calibrated_parameters/`.
-
 ## Citation
 
 WASB model and pretrained weights from:
