@@ -146,7 +146,7 @@ All commands below run **inside the container**, from
 
 ### Running it — the supported cases
 
-**Case A — full WASB tracking run for all 3 videos**
+**Full WASB tracking run for all 3 videos**
 ```bash
 sh run_tracking.sh
 ```
@@ -154,32 +154,7 @@ This writes the per-camera WASB CSVs to
 `tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out{2,4,13}.csv`
 and the overlay videos in `tracking_results/tracking_2d/evaluation/`.
 
-**Case B — track a single video by hand**
-```bash
-python3 track_ball.py \
-    --video /workspace/videos/out4.mp4 \
-    --checkpoint /workspace/WASB-SBDT/pretrained_weights/wasb_basketball_best.pth.tar \
-    --config /workspace/WASB-SBDT/src/configs/model/wasb.yaml \
-    --cam-id cam_1 \
-    --csv-output /workspace/tracking_results/tracking_2d/ball_trajectories/ball_tracking_wasb_out4.csv \
-    --output /workspace/tracking_results/tracking_2d/evaluation/out4_result.mp4
-```
-`out13` needs `--tile-n 3 --mask-rect 3700,500,3840,680` added (full-court
-shot, ball otherwise too small after the mandatory resize — see
-`claude_context.md`); `out2`/`out4` work with plain defaults.
-
-**Case C — inspect confidence on a video without producing final output**
-(threshold calibration / quick sanity check):
-```bash
-python3 track_ball.py \
-    --video /workspace/videos/out2.mp4 \
-    --checkpoint /workspace/WASB-SBDT/pretrained_weights/wasb_basketball_best.pth.tar \
-    --config /workspace/WASB-SBDT/src/configs/model/wasb.yaml \
-    --cam-id cam_0 \
-    --debug-dir /workspace/tracking_results/tracking_2d/evaluation/debug_out2
-```
-
-After any tracker run, use the single evaluation entry point in the main repo:
+After tracker run, use the single evaluation entry point in the main repo:
 `python3 src/evaluate_2d.py`.
 
 ## Citation
