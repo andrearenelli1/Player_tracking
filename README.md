@@ -105,7 +105,7 @@ python3 src/evaluate_3d.py
 ```bash
 python3 src/visualize_2d.py            # live overlay of player+ball boxes per video (press q to quit)
 python3 src/visualize_3d.py            # static 3D plot -> tracking_results/tracking_3d/3d_positions.png
-python3 src/visualize_3d.py --animate --save   # animated -> .../3d_positions.gif
+python3 src/visualize_3d.py --animate --save   # animated -> .../3d_positions.mp4
 ```
 
 ## Ball tracking with WASB/HRNet (Docker)

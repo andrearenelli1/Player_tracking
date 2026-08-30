@@ -5,7 +5,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib.animation import FFMpegWriter, FuncAnimation
 from matplotlib.patches import Rectangle
 
 ROOT = Path(__file__).parent.parent
@@ -13,7 +13,7 @@ ROOT = Path(__file__).parent.parent
 POS_3D_CSV = ROOT / "tracking_results/tracking_3d/3d_positions.csv"
 GLOBAL_ID_MAP_CSV = ROOT / "tracking_results/tracking_3d/global_id_map.csv"
 OUT_PNG = ROOT / "tracking_results/tracking_3d/3d_positions.png"
-OUT_GIF = ROOT / "tracking_results/tracking_3d/3d_positions.gif"
+OUT_MP4 = ROOT / "tracking_results/tracking_3d/3d_positions.mp4"
 
 # Same order/names used in tracking_2d.py and tracking_3d.py: the "frame" field
 # of the 3d csv corresponds 1:1 to the frame index of these videos (already synchronized).
@@ -197,7 +197,7 @@ def main():
     parser.add_argument("--animate", action="store_true",
                          help="show an animation of the movements instead of the static plot")
     parser.add_argument("--save", action="store_true",
-                         help="with --animate, save the gif instead of showing it on screen")
+                         help="with --animate, save an mp4 instead of showing it on screen")
     args = parser.parse_args()
 
     df = pd.read_csv(POS_3D_CSV)
@@ -232,9 +232,11 @@ def main():
         ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), fontsize=8, ncol=2)
         fig.tight_layout()
         if args.save:
-            OUT_GIF.parent.mkdir(parents=True, exist_ok=True)
-            anim.save(OUT_GIF, writer=PillowWriter(fps=FPS))
-            print(f"Saved {OUT_GIF}")
+            OUT_MP4.parent.mkdir(parents=True, exist_ok=True)
+            writer = FFMpegWriter(fps=FPS, bitrate=4000,
+                                   extra_args=["-pix_fmt", "yuv420p"])
+            anim.save(OUT_MP4, writer=writer, dpi=120)
+            print(f"Saved {OUT_MP4}")
         else:
             plt.show()
         for source, _ in video_sources.values():
