@@ -34,9 +34,9 @@ TRAIL_LEN = 15       # how many trail frames to show behind the current position
 
 # Basketball court 28x15m, origin at center, as per CAL_POINTS in calibration.py.
 COURT_HALF_LENGTH = 14.0
-COURT_HALF_WIDTH = 7.5
+COURT_HALF_WIDTH = 8.5
 KEY_LENGTH = 8.2   # distance from the baseline center to the free-throw line
-KEY_HALF_WIDTH = 2.4
+KEY_HALF_WIDTH = 2.5
 
 
 def draw_court(ax):
@@ -223,7 +223,7 @@ def main():
     ax.set_xlabel("X (m)")
     ax.set_ylabel("Y (m)")
     ax.set_zlabel("Z (m)")
-    set_equal_aspect(ax, df, z_scale=0.15 if args.animate else 1.0)
+    set_equal_aspect(ax, df, z_scale=0.08 if args.animate else 0.15)
     ax.view_init(elev=25, azim=-60)
 
     if args.animate:

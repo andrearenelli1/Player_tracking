@@ -1,0 +1,112 @@
+CV Projects
+Player Tracking in Sports
+Multi-View Tracking and 3D Reconstruction
+
+giulia.martinelli-2@unitn.it
+
+Projects for A.Y. 2025-2026
+What we expect:
+Look for state of art methods
+Implement and test
+Improve
+Read as much as you can
+Make assumptions
+Record videos
+Use pre-recorded data
+University of Trento
+Computer Vision
+2
+
+Projects for A.Y. 2025-2026
+What we expect when ask for a meeting?
+Show that you tried
+Show difficulties encountered and actions taken to resolve
+University of Trento
+Computer Vision
+3
+
+Notes!
+Deep Learning is welcome, but not required (we cannot provide GPUs)
+Videos are for internal use only. Do not share them.
+The evaluation of your project depends more on your interaction with the tutor rather than on the numerical results
+The goal of the project is for you to learn something and face the real-world issues
+The project is individual for each group, but you are allowed to communicate, share ideas, share best practices. It is not a competition.
+Anyone does not have a group and would like to join one?
+
+Sanbapolis facility
+
+
+Project Goal and step
+Using the multi-view camera setup at Sanbapolis, track players and the ball
+Annotate bounding boxes for players, referees, and the ball in each camera view.
+Perform 2D tracking of players and the ball across frames for each camera. 
+Provide numerical results for the annotated ones.
+Reconstruct 3D trajectories of players (center of bounding boxes) and the ball using triangulation across multiple camera views.
+Provide numerical results for the annotated ones.
+Visualize the 3D tracking by importing the reconstructed motion into Unreal Engine.
+Team of 1 pp: task 1,2,2a,3 is mandatory using one camera. Bonus: task 3a.
+Team of 2 pp: task 1,2,2a,3,3a is mandatory using two cameras. Bonus: task 4.
+Team of 3 pp: task 1,2,2a,3,3a,4 is mandatory using two cameras. Bonus: use 3 cameras.
+The bonus task is NOT mandatory and is left to each student’s discretion, as an additional application-oriented challenge.
+
+There are 3 camera viewpoint for each action
+One action per group
+Around 150 frames per person
+register to Roboflow (one account per group)
+send to the tutor one email per group to be added to Roboflow
+for testing and evaluation it is mandatory to use at least the action you have annotated. You can test and evaluate on actions annotated by other groups.
+
+Annotate Bounding Boxes
+
+Draw a Bounding Box
+Select the corresponding class
+Refree_1
+Refree_2
+
+Annotate Bounding Boxes
+
+2) 2D Tracking
+Annotation is performed at 5 fps
+Perform tracking at native frame rate (25fps)
+Use standard metrics for evaluation (search state of the art, e.g. IOU)
+
+3) 3D Tracking
+Goal: Use camera parameters to perform triangulation of the tracked/GT 3D positions of the players and the ball
+Rectified the video at input (code is provided. Remember: if you rectify the video you also have to apply the same transformation to the GT/the coordinates you have tracked).
+Triangulation
+Display 3D position of players and ball
+3a) Provide results using common tracking metrics (eg. trajectories metrics, …)
+
+4) (Bonus) Unreal Engine
+Display 3D data on Unreal. (contact tutor for more details)
+
+How do I deliver my project?
+Code + Readme (push on Github with Github Classroom)
+Dataset 
+Report with results (max 5 pages) (LNCS format, PDF)
+Link to the presentation in Google Slides format only 
+Oral presentation on the day of the exam (8 min per group + Q&A) 
+
+Deadline: All material must be delivered to the lecturers at least 3 working days before the exam. No exceptions will be made.
+14
+
+How do I deliver my project?
+15
+NameSurname1/NameSurname2
+https://classroom.github.com/a/BwBLw45f
+Accept the GitHub Classroom invitation
+This helps confirm the final groups 
+It also lets me know if anyone wants to change topic 
+Then I will create the dataset on Roboflow 
+Each group will receive the images to annotate 
+The material will be available from Thursday, 23 April 
+
+Project’s Score
+16
+Max project score: 15 points
+
+Code(5pt)	
+Report (2pt)	
+Supplementary (e.g sample video results) (1pt)
+Independence in carrying out a project (1pt)
+Oral (6pt)
