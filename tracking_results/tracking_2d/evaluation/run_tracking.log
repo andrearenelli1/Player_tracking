@@ -50,7 +50,7 @@
   threshold=0.5    ->   2.7%  (14/523 frames)
 
 [CONFIDENCE STATISTICS] min=0.0086 max=0.8219 mean=0.0401 median=0.0108
-=== out13 (cam_2, tiled 3x3 + mask on the corner-graphic confuser, see claude_context.md) ===
+=== out13 (cam_2, tiled 3x3 + mask on the corner-graphic confuser) ===
 [INFO] Active ROI masks: [(3700.0, 500.0, 3840.0, 680.0)]
 [INFO] Using device: cuda
 [INFO] frames_in=3, input size=512x288

@@ -2,7 +2,7 @@
 # Downloads only the checkpoint this fork actually uses (WASB/HRNet,
 # basketball). The original repo's script downloaded 35 checkpoints
 # across 7 models x 5 sports; trimmed down since this repo only runs
-# HRNet/WASB now (see src/models/__init__.py, claude_context.md).
+# HRNet/WASB now (see src/models/__init__.py).
 SCRIPT_DIR=$(cd $(dirname $0); pwd)
 BASE_DIR=$SCRIPT_DIR/../..
 

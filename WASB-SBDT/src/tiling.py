@@ -1,10 +1,9 @@
 """
 Tile-grid utilities for running inference on crops of a frame instead of
 the whole frame, to recover effective resolution on wide shots where the
-ball becomes too small after the network's mandatory resize (e.g. out13,
-see claude_context.md's diagnosis: ball ~55px on a 3840x2160 frame becomes
-~7px after resizing the full frame to 512x288 -- below what HRNet can
-reliably detect).
+ball becomes too small after the network's mandatory resize (e.g. out13:
+a ball ~55px wide on a 3840x2160 frame becomes ~7px after resizing the
+full frame to 512x288 -- below what HRNet can reliably detect).
 """
 
 

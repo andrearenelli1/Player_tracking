@@ -1,6 +1,6 @@
 #!/bin/bash
-# Runs track_ball.py on all 3 project videos with the settings validated
-# in claude_context.md (default conf-thresh=0.02 baked into track_ball.py;
+# Runs track_ball.py on all 3 project videos with the validated settings
+# (default conf-thresh=0.02 baked into track_ball.py;
 # out13 needs tiling + a mask for the corner-graphic confuser, out2/out4
 # work with plain defaults). Produces one CSV (schema shared with
 # tracking_players_2d.py/track_ball_classic.py, see track_ball.py's
@@ -44,7 +44,7 @@ python3 track_ball.py \
   --csv-output ${BALL_DIR}/ball_tracking_wasb_out4.csv \
   --output ${EVAL_DIR}/out4_result.mp4
 
-echo "=== out13 (cam_2, tiled 3x3 + mask on the corner-graphic confuser, see claude_context.md) ==="
+echo "=== out13 (cam_2, tiled 3x3 + mask on the corner-graphic confuser) ==="
 python3 track_ball.py \
   --video ${VIDEOS_DIR}/out13.mp4 \
   --checkpoint ${CHECKPOINT} \

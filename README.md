@@ -112,9 +112,9 @@ python3 src/visualize_3d.py --animate --save   # animated -> .../3d_positions.gi
 
 `WASB-SBDT/` is a trimmed fork of
 [nttcom/WASB-SBDT](https://github.com/nttcom/WASB-SBDT) (BMVC2023),
-kept to just its basketball checkpoint for zero-shot ball detection —
-see `WASB-SBDT/claude_context.md` for the full history (why it was
-picked, threshold calibration, tiling for wide shots).
+kept to just its basketball checkpoint for zero-shot ball detection
+(threshold calibration and tiling for wide shots are handled in the
+scripts described below).
 
 ### Get the image
 

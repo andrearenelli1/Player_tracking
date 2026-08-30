@@ -52,7 +52,7 @@ RUN pip3 install numpy==1.22.4 torch==1.11.0+cu113 torchvision==0.12.0+cu113 --e
 # original hydra-based training/eval framework entirely (see eval_wasb.py,
 # track_ball.py), so none of those are needed. attrdict/PyYAML added
 # permanently here since load_model() needs them (previously reinstalled by
-# hand each session, see claude_context.md).
+# hand on every run).
 RUN pip3 install opencv-python==4.6.0.66 attrdict PyYAML
 
 COPY src /root/src
