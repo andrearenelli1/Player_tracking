@@ -19,6 +19,11 @@ a CUDA-capable GPU + a matching torch build. Ball tracking's WASB option
 runs in its own Docker container (separate environment, see the dedicated
 section below); its classic-CV option needs nothing extra beyond the venv.
 
+The 3 source videos (`out2.mp4`, `out4.mp4`, `out13.mp4`) are not in this
+repo (`.gitignore`'d — too large). Download them from this Drive folder
+and place them in `videos/`:
+<https://drive.google.com/drive/folders/1BMnV2TBXa9lhLrVAurMdJCnnp1KS1A5N>
+
 ## Repo layout
 
 - `videos/` — the 3 source `.mp4`s (`out2`, `out4`, `out13`), 25fps, 4K
